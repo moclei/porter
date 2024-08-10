@@ -77,3 +77,20 @@ porter.onMessage({
 });
 
 ```
+
+
+
+### Structure of messages
+
+Porter prescribes the following message format:
+
+```typescript
+type Message = {
+    action: string;
+    payload: any;
+}
+
+so a message will look like:
+
+const message = {action: 'message-name', payload: {/*any shape*/}}
+```
