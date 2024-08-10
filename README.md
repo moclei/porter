@@ -1,5 +1,5 @@
 <br>
-![Porter](./img/porter-logo.png)
+![Porter](img/porter_logo.png)
 <br>
 
 `npm i porter`
