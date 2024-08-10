@@ -1,10 +1,9 @@
-<br>
-![Porter](img/porter_logo.png)
-<br>
+
+![porter_logo](img/porter_logo.png)
 
 `npm i porter`
 
-Porter scales from a simple sendMessage replacement to an enterprise message and state synchronization system with full Typescript support.
+Porter scales from a simple Web Extensions sendMessage replacement to an enterprise message and state synchronization system with full Typescript support.
 
 - Minimal size (< 8kb)
 - Utilities for managing ports, messages and senders.
