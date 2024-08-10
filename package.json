@@ -21,10 +21,15 @@
   },
   "keywords": [
     "web-extension",
+    "browser-extension",
+    "extension",
+    "browser",
     "port",
+    "message",
     "chrome",
     "firefox",
     "safari",
+    "edge",
     "mv3"
   ],
   "author": "Marc O'Cleirigh",

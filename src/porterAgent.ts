@@ -5,7 +5,7 @@ import { getPortDetails, log } from './porter.utils';
 export class PorterAgent {
     private agent: Agent;
     private config: MessageConfig | null;
-    constructor(private porterNamespace: string = 'porter', private agentContext: PorterContext) {
+    constructor(private agentContext: PorterContext, private porterNamespace: string = 'porter',) {
         const name = this.porterNamespace + (this.agentContext === PorterContext.ContentScript ? '' : '-' + this.agentContext);
         const port = browser.runtime.connect({ name });
         this.config = null;
