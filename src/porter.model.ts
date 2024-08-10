@@ -20,12 +20,12 @@ export type Message<K extends keyof MessageAction> = {
     payload: MessageAction[K];
 }
 
-export type MessageConfig = Partial<{
+export type MessageConfig = {
     [K in keyof MessageAction]: (
         message: Message<K>,
         port: browser.Runtime.Port,
         senderDetails: PortDetails) => void
-}>;
+};
 
 export type PortDetails = {
     tabId: number;
