@@ -7,7 +7,7 @@ export type MessageAction = {
 }
 
 export enum PorterContext {
-    ContentScript = 'contentscroipt',
+    ContentScript = 'contentscript',
     Devtools = 'devtools',
     Sidebar = 'sidebar',
     Options = 'options',
