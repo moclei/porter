@@ -1,7 +1,7 @@
 
 ![porter_logo](img/porter_logo.png)
 
-`npm i porter`
+`npm i porter-source`
 
 Porter scales from a simple Web Extensions sendMessage replacement to an enterprise message and state synchronization system with full Typescript support.
 
@@ -20,7 +20,7 @@ Porter can be sourced anywhere, but the Service Worker usually makes the most se
 
 ```typescript
 // service worker
-import { Porter } from 'porter'
+import { Porter } from 'porter-source'
 
 const porter = new Porter();
 
@@ -49,7 +49,7 @@ porter.post(PorterContext.Sidebar, {action: 'hello-sidebar', payload: {}})
 ### Use Porter in your 'Agents', that is, your Content Scripts, Sidebars, Devtools, Popups, etc.
 
 ```typescript
-import { PorterAgent } from 'porter'
+import { PorterAgent } from 'porter-source'
 
 const porter = new PorterAgent(PorterContext.ContentScript)
 
