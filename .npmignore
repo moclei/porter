@@ -1,0 +1,24 @@
+# Source
+src/
+
+# Tests
+**/*.test.ts
+**/__tests__/
+
+# Config files
+tsconfig.json
+jest.config.js
+
+# Development files
+.gitignore
+.eslintrc
+.prettierrc
+
+# Build tools
+webpack.config.js
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log

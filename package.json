@@ -5,13 +5,15 @@
   "module": "dist/esm/index.js",
   "types": "dist/types/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "npm run build:ts && npm run build:js",
     "build:ts": "tsc --emitDeclarationOnly --outDir dist",
     "build:js": "node esbuild.config.js",
-    "test": "jest",
+    "test": "jest --config jest.config.js",
     "prepublishOnly": "npm run build"
   },
   "exports": {
@@ -44,6 +46,7 @@
     "esbuild": "^0.23.0",
     "esbuild-node-externals": "^1.14.0",
     "jest": "^29.7.0",
+    "ts-jest": "^29.2.4",
     "typescript": "^5.5.4",
     "webextension-polyfill": "^0.12.0"
   },

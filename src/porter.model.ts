@@ -29,7 +29,7 @@ export enum PorterContext {
 
 export type Message<K extends keyof MessageAction> = {
     action: K;
-    payload: MessageAction[K];
+    payload?: MessageAction[K];
 }
 
 export type MessageConfig = {

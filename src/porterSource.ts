@@ -30,6 +30,10 @@ export class PorterSource {
     }
 
     public getAgentsByContext(context: PorterContext): Agent[] {
+        console.log(`PorterSource: Getting agents by 'context:${context}:'`);
+        const entries = Array.from(this.agents.entries())
+            .filter(([key, _]) => key.startsWith(`context:${context}:`));
+        console.log(`PorterSource: agent entries are: ${entries}`);
         return Array.from(this.agents.entries())
             .filter(([key, _]) => key.startsWith(`context:${context}:`))
             .map(([_, agent]) => agent);
@@ -41,6 +45,7 @@ export class PorterSource {
 
 
     public post(message: Message<any>, target: PorterContext, details?: number | { tabId: number; frameId: number },) {
+        console.log('PorterSource: Posting message to', target);
         switch (target) {
             case PorterContext.ContentScript:
                 this.postToContentScript(message, details as { tabId: number; frameId: number });
@@ -71,11 +76,13 @@ export class PorterSource {
     }
 
     private handleConnection(port: Runtime.Port) {
+        console.log('Handling connection for port:', port.name);
         if (!port.name) {
             console.warn('PorterSource: Port name not provided');
             return;
         }
         const connectCtx = port.name.split('-');
+        console.log('Connect context:', connectCtx);
         if (connectCtx.length > 2) {
             console.warn('PorterSource: Invalid port name');
             return;
@@ -88,24 +95,27 @@ export class PorterSource {
     }
 
     private addContextAgent(port: Runtime.Port, context: PorterContext) {
+        console.log('PorterSource: Adding context agent');
         const counter = (this.contextCounters.get(context) || 0) + 1;
         this.contextCounters.set(context, counter);
 
         const key = this.getContextKey(context, counter - 1);
+        console.log('PorterSource: Adding context agent, key: ', key);
         const connectContext = ConnectContext.NewAgent;
 
         this.setupAgent(port, context, key, connectContext);
     }
 
     private addContentScriptAgent(port: Runtime.Port) {
+        //  console.log('PorterSource: Adding content script agent');
         const tabId = port.sender?.tab?.id || 0;
         const frameId = port.sender?.frameId || 0;
         const key = this.getContentScriptKey(tabId, frameId);
-
+        // console.log('PorterSource: Adding content script agent, key: ', key);
         let connectContext;
 
         const tabAgents = Array.from(this.agents.keys())
-            .filter(k => k.startsWith(`contentScript:${tabId}:`));
+            .filter(k => k.startsWith(`contentscript:${tabId}:`));
 
         if (tabAgents.length === 0) {
             connectContext = ConnectContext.NewTab;
@@ -173,6 +183,7 @@ export class PorterSource {
     }
 
     private postToContentScript(message: Message<any>, details: { tabId: number; frameId: number }) {
+        console.log('PorterSource: posting to content script');
         const { tabId, frameId } = details;
         const relevantAgents = Array.from(this.agents.entries()).filter(([key, _]) => key.startsWith(`${PorterContext.ContentScript}:${tabId}:`));
 
@@ -190,7 +201,10 @@ export class PorterSource {
     }
 
     private postToContext(message: Message<any>, target: PorterContext, index?: number) {
+        console.log('PorterSource: posting to context', target);
         const relevantAgents = this.getAgentsByContext(target);
+        console.log('PorterSource: relevantAgents', relevantAgents);
+        console.log('PorterSource: all agents', Array.from(this.agents.entries()));
         if (index !== undefined) {
             if (index < relevantAgents.length) {
                 relevantAgents[index].port?.postMessage(message);
@@ -207,6 +221,6 @@ export class PorterSource {
     }
 
     private getContentScriptKey(tabId: number, frameId: number): string {
-        return `contentScript:${tabId}:${frameId}`;
+        return `contentscript:${tabId}:${frameId}`;
     }
 }
