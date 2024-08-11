@@ -1,3 +1,3 @@
 export { PorterSource as Porter } from './porterSource';
 export { PorterAgent } from './porterAgent';
-export { PorterContext } from './porter.model';
+export { PorterContext, ConnectContext, PorterEvents, Message as PorterMessage, Agent, MessageConfig } from './porter.model';
