@@ -49,7 +49,7 @@ porter.post(PorterContext.Sidebar, {action: 'hello-sidebar', payload: {}})
 ### Use Porter in your 'Agents', that is, your Content Scripts, Sidebars, Devtools, Popups, etc.
 
 ```typescript
-import { PorterAgent } from 'porter-source'
+import { PorterAgent, PorterContext } from 'porter-source'
 
 const porter = new PorterAgent(PorterContext.ContentScript)
 
