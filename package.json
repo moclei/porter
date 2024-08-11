@@ -8,7 +8,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "node esbuild.config.js",
+    "build": "npm run build:ts && npm run build:js",
+    "build:ts": "tsc --emitDeclarationOnly --outDir dist",
+    "build:js": "node esbuild.config.js",
     "test": "jest",
     "prepublishOnly": "npm run build"
   },
