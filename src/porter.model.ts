@@ -6,6 +6,18 @@ export type MessageAction = {
     [key: string]: any;
 }
 
+export interface PorterEvents {
+    onConnect: { connectContext: ConnectContext; porterContext: PorterContext; portDetails: PortDetails };
+    onDisconnect: void;
+}
+
+export enum ConnectContext {
+    NewTab = 'NewTab',
+    NewFrame = 'NewFrame',
+    RefreshConnection = 'RefreshConnection',
+    NewAgent = 'NewAgent',
+}
+
 export enum PorterContext {
     ContentScript = 'contentscript',
     Devtools = 'devtools',

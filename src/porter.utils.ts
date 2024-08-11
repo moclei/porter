@@ -43,4 +43,25 @@ function log(port: Runtime.Port, message: any) {
     }
 }
 
+export class EventEmitter<T> {
+    private listeners: { [K in keyof T]?: ((arg: T[K]) => void)[] } = {};
+
+    addListener<K extends keyof T>(event: K, listener: (arg: T[K]) => void): void {
+        if (!this.listeners[event]) {
+            this.listeners[event] = [];
+        }
+        this.listeners[event]!.push(listener);
+    }
+
+    removeListener<K extends keyof T>(event: K, listener: (arg: T[K]) => void): void {
+        if (!this.listeners[event]) return;
+        this.listeners[event] = this.listeners[event]!.filter(l => l !== listener);
+    }
+
+    emit<K extends keyof T>(event: K, arg: T[K]): void {
+        if (!this.listeners[event]) return;
+        this.listeners[event]!.forEach(listener => listener(arg));
+    }
+}
+
 export { getPortDetails, log, isValidPort, isValidSender, isServiceWorker };
