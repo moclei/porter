@@ -45,7 +45,7 @@ export class PorterSource {
 
 
     public post(message: Message<any>, target: PorterContext, details?: number | { tabId: number; frameId: number },) {
-        console.log('PorterSource: Posting message to', target);
+        console.log('PorterSource: ', target);
         switch (target) {
             case PorterContext.ContentScript:
                 this.postToContentScript(message, details as { tabId: number; frameId: number });
