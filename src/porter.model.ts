@@ -36,7 +36,7 @@ export type MessageConfig = {
     [K in keyof MessageAction]: (
         message: Message<K>,
         port: browser.Runtime.Port,
-        senderDetails: PortDetails) => void
+        senderDetails?: PortDetails) => void
 };
 
 export type PortDetails = {

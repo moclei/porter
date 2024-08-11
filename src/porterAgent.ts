@@ -1,6 +1,6 @@
 import browser, { Extension, Runtime } from 'webextension-polyfill';
 import { Agent, Message, MessageConfig, PorterContext } from './porter.model';
-import { getPortDetails, log } from './porter.utils';
+import { log } from './porter.utils';
 
 export class PorterAgent {
     private agent: Agent;
@@ -31,21 +31,18 @@ export class PorterAgent {
     }
 
     private handleMessage(port: Runtime.Port, message: any) {
+        console.warn('Porter: handleMessage ', message, port);
         if (!this.config) {
             console.warn('Porter: No message handler configured');
             return;
         }
-        if (!port.sender) {
-            console.warn('Porter: Message heard from unknown sender');
-            return;
-        }
+
         log(port, message);
         const action = message.action;
         const handler = this.config[action];
 
-        const senderDetails = getPortDetails(port.sender);
         if (handler) {
-            handler(message, port, senderDetails);
+            handler(message, port);
         } else {
             log(port, { action: 'error', payload: `No handler for action: ${action}` });
         }
