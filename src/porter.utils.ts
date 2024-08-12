@@ -1,6 +1,5 @@
 import { Runtime } from "webextension-polyfill";
 import { PortDetails } from "./porter.model";
-import exp from "constants";
 
 function isServiceWorker() {
     return !self.window || self.window.hasOwnProperty('ServiceWorkerGlobalScope');
