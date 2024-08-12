@@ -7,8 +7,8 @@ export type MessageAction = {
 }
 
 export interface PorterEvents {
-    onConnect: { connectContext: ConnectContext; porterContext: PorterContext; portDetails: PortDetails };
-    onDisconnect: void;
+    onConnect: { key: string, connectContext: ConnectContext; porterContext: PorterContext; portDetails: PortDetails };
+    onDisconnect: { key: string, connectContext: ConnectContext; porterContext: PorterContext; portDetails: PortDetails };
 }
 
 export enum ConnectContext {

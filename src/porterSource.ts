@@ -132,11 +132,11 @@ export class PorterSource {
         const agent = { port, data: null };
         this.agents.set(key, agent);
 
-        this.eventEmitter.emit('onConnect', { connectContext, porterContext, portDetails: getPortDetails(port.sender!) });
+        this.eventEmitter.emit('onConnect', { key, connectContext, porterContext, portDetails: getPortDetails(port.sender!) });
         port.onMessage.addListener((message: any) => this.handleMessage(port, message));
         port.onDisconnect.addListener(() => {
             log(port, { action: 'disconnect', payload: `Porter: Disconnected from ${port.name}` });
-            this.eventEmitter.emit('onDisconnect', undefined);
+            this.eventEmitter.emit('onDisconnect', { key, connectContext, porterContext, portDetails: getPortDetails(port.sender!) });
             this.agents.delete(key);
             if (porterContext !== PorterContext.ContentScript) {
                 this.reindexContextAgents(porterContext);
