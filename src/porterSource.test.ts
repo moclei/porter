@@ -15,7 +15,6 @@ jest.mock('webextension-polyfill', () => ({
 jest.mock('./porter.utils', () => ({
     ...jest.requireActual('./porter.utils'),
     isServiceWorker: jest.fn().mockReturnValue(true),
-    getPortDetails: jest.fn().mockReturnValue({}),
 }));
 
 

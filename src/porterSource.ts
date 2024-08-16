@@ -1,36 +1,52 @@
 import browser, { Runtime, Tabs } from 'webextension-polyfill';
-import { AgentLocation, ConnectContext, Listener, Message, MessageConfig, MessageListener, PorterEvents } from './porter.model';
+import { AgentLocation, AgentMetadata, ConnectContext, Listener, Message, MessageConfig, MessageListener, PorterEvent } from './porter.model';
 import { Agent, PorterContext } from './porter.model';
-import { getPortDetails, isServiceWorker } from './porter.utils';
+import { isServiceWorker } from './porter.utils';
 
 export class PorterSource {
+    private static instance: PorterSource | null = null;
     private agents: Map<string, Agent> = new Map();
     private contextCounters: Map<PorterContext, number> = new Map();
-    private listeners: Map<keyof PorterEvents, Set<Listener<keyof PorterEvents>>> = new Map();
+    private listeners: Map<keyof PorterEvent, Set<Listener<keyof PorterEvent>>> = new Map();
     private messageListeners: Set<MessageListener> = new Set();
 
-    constructor(private porterNamespace: string = 'porter') {
+    private constructor(private porterNamespace: string = 'porter') {
         if (!isServiceWorker()) {
             console.warn('PorterSource: Can only create porter source in service worker');
         }
         browser.runtime.onConnect.addListener(this.handleConnection.bind(this));
     }
 
-    public addListener<T extends keyof PorterEvents>(event: T, listener: Listener<T>) {
+    public static getInstance(porterNamespace: string = 'porter'): PorterSource {
+        if (!PorterSource.instance) {
+            PorterSource.instance = new PorterSource(porterNamespace);
+        }
+        return PorterSource.instance;
+    }
+
+    public onConnect(listener: Listener<'onConnect'>) {
+        return this.addListener('onConnect', listener);
+    }
+
+    public onDisconnect(listener: Listener<'onDisconnect'>) {
+        return this.addListener('onDisconnect', listener);
+    }
+
+    public addListener<T extends keyof PorterEvent>(event: T, listener: Listener<T>) {
         if (!this.listeners.has(event)) {
             this.listeners.set(event, new Set());
         }
-        this.listeners.get(event)!.add(listener as Listener<keyof PorterEvents>);
+        this.listeners.get(event)!.add(listener as Listener<keyof PorterEvent>);
 
         return () => {
-            this.listeners.get(event)?.delete(listener as Listener<keyof PorterEvents>);
+            this.listeners.get(event)?.delete(listener as Listener<keyof PorterEvent>);
         };
     }
 
     public onMessage(config: MessageConfig) {
         const messageListener: MessageListener = {
             config,
-            listener: (event: PorterEvents['onMessage']) => {
+            listener: (event: PorterEvent['onMessage']) => {
                 const handler = config[event.message.action];
                 if (handler) {
                     handler(event.message, { key: event.key, context: event.context, location: event.location });
@@ -44,12 +60,20 @@ export class PorterSource {
         };
     }
 
-    private emitMessage(arg: PorterEvents['onMessage']) {
-        console.log('Porter emitMessage: ', arg);
-        this.messageListeners.forEach(({ listener }) => listener(arg as PorterEvents['onMessage']));
+    private emitMessage(messageEvent: PorterEvent['onMessage']) {
+        console.log('PorterSource, message: ', messageEvent);
+        if (!!messageEvent.message.target) {
+            const { context, location } = messageEvent.message.target;
+            if (location) {
+                this.post(messageEvent.message, context as PorterContext, location);
+            } else {
+                this.post(messageEvent.message, context);
+            }
+        }
+        this.messageListeners.forEach(({ listener }) => listener(messageEvent as PorterEvent['onMessage']));
     }
 
-    private emit<T extends keyof PorterEvents>(event: T, arg: PorterEvents[T]) {
+    private emit<T extends keyof PorterEvent>(event: T, arg: PorterEvent[T]) {
         console.log('Porter emitMessage: ', arg);
         this.listeners.get(event)?.forEach(listener => (listener as Listener<T>)(arg));
     }
@@ -87,19 +111,6 @@ export class PorterSource {
             .filter(([key, _]) => key.startsWith(`${prefix}:`))
             .map(([_, agent]) => agent);
     }
-    // public getAgent(agentCtx: PorterContext): Agent | null {
-    //     return this.agents.get(agentCtx) || null;
-    // }
-
-    // public getAgentsByContext(context: PorterContext): Agent[] {
-    //     console.log(`PorterSource: Getting agents by 'context:${context}:'`);
-    //     const entries = Array.from(this.agents.entries())
-    //         .filter(([key, _]) => key.startsWith(`context:${context}:`));
-    //     console.log(`PorterSource: agent entries are: ${entries}`);
-    //     return Array.from(this.agents.entries())
-    //         .filter(([key, _]) => key.startsWith(`context:${context}:`))
-    //         .map(([_, agent]) => agent);
-    // }
 
     public post(message: Message<any>, context: PorterContext): void;
     public post(message: Message<any>, key: string): void;
@@ -225,18 +236,23 @@ export class PorterSource {
     private setupAgent(port: Runtime.Port, porterContext: PorterContext, key: string, connectContext: ConnectContext, location: { index: number, subIndex?: number }) {
         const agent = { port, data: null };
         this.agents.set(key, agent);
-        // const portDetails = getPortDetails(port.sender!);
         const agentMetadata = { key, connectionType: connectContext, context: porterContext, location }
         this.emit('onConnect', agentMetadata);
-        port.onMessage.addListener((message: any) => this.emitMessage({ ...agentMetadata, message }));
-        port.onDisconnect.addListener(() => {
-            console.log('PorterSource, port and message: ', port, { action: 'disconnect', payload: `Porter: Disconnected from ${port.name}` });
-            this.emit('onDisconnect', agentMetadata);
-            this.agents.delete(key);
-            if (porterContext !== PorterContext.ContentScript) {
-                this.reindexContextAgents(porterContext);
-            }
-        });
+        port.onMessage.addListener((message: any) => this.handleMessage(message, agentMetadata));
+        port.onDisconnect.addListener(() => this.handleDisconnect(agentMetadata));
+    }
+
+    private handleMessage(message: any, agentMetadata: AgentMetadata) {
+
+        this.emitMessage({ ...agentMetadata, message })
+    }
+    private handleDisconnect(agentMetadata: AgentMetadata) {
+        console.log('PorterSource, disconnected from agent: ', agentMetadata);
+        this.emit('onDisconnect', agentMetadata);
+        this.agents.delete(agentMetadata.key);
+        if (!agentMetadata.location || !agentMetadata.location.subIndex) {
+            this.reindexContextAgents(agentMetadata.context);
+        }
     }
 
     private reindexContextAgents(context: PorterContext) {
@@ -264,4 +280,19 @@ export class PorterSource {
     private printAgents() {
         console.log('PorterSource: Agents are: ', this.agents);
     }
+}
+
+export function source(porterNamespace: string = 'porter'): [
+    (message: Message<any>, contextOrKey: PorterContext | string, location?: Partial<AgentLocation>) => void,
+    (config: MessageConfig) => () => void,
+    (listener: Listener<'onConnect'>) => () => void,
+    (listener: Listener<'onDisconnect'>) => () => void,
+] {
+    const instance = PorterSource.getInstance(porterNamespace);
+    return [
+        instance.post.bind(instance),
+        instance.onMessage.bind(instance),
+        instance.onConnect.bind(instance),
+        instance.onDisconnect.bind(instance),
+    ];
 }

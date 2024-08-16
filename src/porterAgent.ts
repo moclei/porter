@@ -1,18 +1,26 @@
 import browser, { Extension, Runtime } from 'webextension-polyfill';
-import { Agent, Message, MessageConfig, PorterContext } from './porter.model';
+import { Agent, Message, MessageConfig, PorterContext, TargetAgent } from './porter.model';
 // import { log } from './porter.utils';
 
 export class PorterAgent {
+    private static instance: PorterAgent | null = null;
     private agent: Agent | undefined = undefined;
     private config: MessageConfig | null = null;
     private context: PorterContext | null = null;
     private namespace: string = 'porter';
 
 
-    constructor(options: { agentContext?: PorterContext, namespace?: string } = {}) {
+    private constructor(options: { agentContext?: PorterContext, namespace?: string } = {}) {
         this.namespace = options.namespace ?? this.namespace;
         this.context = options.agentContext ?? this.determineContext();
         this.initializeConnection();
+    }
+
+    public static getInstance(options: { agentContext?: PorterContext, namespace?: string } = {}): PorterAgent {
+        if (!PorterAgent.instance) {
+            PorterAgent.instance = new PorterAgent(options);
+        }
+        return PorterAgent.instance;
     }
 
     private initializeConnection() {
@@ -23,19 +31,11 @@ export class PorterAgent {
         port.onDisconnect.addListener(() => this.handleDisconnect(port));
     }
 
-    // public connectRelay(target: PorterContext) {
-    //     const name = this.namespace + '-' + this.context; + '-' + target;
-    //     const port = browser.runtime.connect({ name });
-    //     this.agent = { port, data: {} };
-    //     port.onMessage.addListener((message: any) => this.handleMessage(port, message));
-    //     port.onDisconnect.addListener(() => this.handleDisconnect(port));
-    // }
-
     public onMessage(config: MessageConfig) {
         this.config = config;
     }
 
-    public post(message: Message<any>) {
+    public post(message: Message<any>, target?: TargetAgent) {
         if (!this.agent) {
             console.warn('Porter: No agent available to post message');
             return;
@@ -43,6 +43,9 @@ export class PorterAgent {
         if (!this.agent.port) {
             console.warn('Porter: No port available to post message');
             return;
+        }
+        if (target) {
+            message.target = target;
         }
         this.agent.port.postMessage(message);
     }
@@ -54,7 +57,7 @@ export class PorterAgent {
     private handleMessage(port: Runtime.Port, message: any) {
         console.warn('Porter: handleMessage ', message, port);
         if (!this.config) {
-            console.warn('Porter: No message handler configured');
+            console.warn('Porter: No message handler configured, message: ', message);
             return;
         }
 
@@ -65,7 +68,7 @@ export class PorterAgent {
         if (handler) {
             handler(message);
         } else {
-            console.log('Porter, port and message: ', port, { action: 'error', payload: `No handler for action: ${action}` });
+            console.log('Porter, port and message: ', port, { action: 'error', payload: `No handler for message with action: ${action}` });
         }
     }
 
@@ -111,6 +114,12 @@ export class PorterAgent {
     }
 }
 
-export function connect(options?: { agentContext?: PorterContext, namespace?: string }): PorterAgent {
-    return new PorterAgent(options);
+
+
+export function connect(options?: { agentContext?: PorterContext, namespace?: string }): [
+    (message: Message<any>, target?: TargetAgent) => void,
+    (config: MessageConfig) => void
+] {
+    const porterInstance = PorterAgent.getInstance(options);
+    return [porterInstance?.post.bind(porterInstance), porterInstance.onMessage.bind(porterInstance)];
 }
