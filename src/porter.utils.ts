@@ -30,17 +30,17 @@ function isValidSender(sender: Runtime.MessageSender): sender is Runtime.Message
     return !(!sender || !sender.tab || sender.frameId === undefined || sender.tab.id === undefined);
 }
 
-function log(port: Runtime.Port, message: any) {
-    if (port.sender?.tab && port.sender.tab.id !== undefined && port.sender.frameId !== undefined) {
-        let messageStr = `Porter: [${port.sender.tab.id}-${port.sender.frameId}] *${message.action}*`;
-        if (message.payload) {
-            messageStr += `, payload: ${JSON.stringify(message.payload)}`;
-        }
-        console.info(messageStr);
-    } else {
-        console.info(`Porter: *${message.action}*, payload: ${JSON.stringify(message.payload)}`);
-    }
-}
+// function log(port: Runtime.Port, message: any) {
+//     if (port.sender?.tab && port.sender.tab.id !== undefined && port.sender.frameId !== undefined) {
+//         let messageStr = `Porter: [${port.sender.tab.id}-${port.sender.frameId}] *${message.action}*`;
+//         if (message.payload) {
+//             messageStr += `, payload: ${JSON.stringify(message.payload)}`;
+//         }
+//         console.info(messageStr);
+//     } else {
+//         console.info(`Porter: *${message.action}*, payload: ${JSON.stringify(message.payload)}`);
+//     }
+// }
 
 export class EventEmitter<T> {
     private listeners: { [K in keyof T]?: ((arg: T[K]) => void)[] } = {};
@@ -63,4 +63,4 @@ export class EventEmitter<T> {
     }
 }
 
-export { getPortDetails, log, isValidPort, isValidSender, isServiceWorker };
+export { getPortDetails, /* log,*/ isValidPort, isValidSender, isServiceWorker };

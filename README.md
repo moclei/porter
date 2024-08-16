@@ -8,7 +8,7 @@ Porter scales from a simple Web Extensions sendMessage replacement to an enterpr
 - Minimal size (< 8kb)
 - Utilities for managing ports, messages and senders.
 - Faster and less memory than message sending
-- Many scenarios available -- Sidebar, Devtools, Popup, and of course Content Scripts
+- Many scenarios available -- Sidepanel, Devtools, Popup, and of course Content Scripts
 - Can split content scripts out by frameId for ultimately granular message passing.
 
 Examples: Coming soon.
@@ -41,12 +41,12 @@ porter.onMessage({
 porter.post({tabId: 12, frameId: 0}, {action: 'hello-target', payload: { value: 3 }});
 
 
-// or send a message to a connected 'agent' such as a sidebar
-porter.post(PorterContext.Sidebar, {action: 'hello-sidebar', payload: {}})
+// or send a message to a connected 'agent' such as a Sidepanel
+porter.post(PorterContext.Sidepanel, {action: 'hello-Sidepanel', payload: {}})
 
 ```
 
-### Use Porter in your 'Agents', that is, your Content Scripts, Sidebars, Devtools, Popups, etc.
+### Use Porter in your 'Agents', that is, your Content Scripts, Sidepanels, Devtools, Popups, etc.
 
 ```typescript
 import { PorterAgent, PorterContext } from 'porter-source'

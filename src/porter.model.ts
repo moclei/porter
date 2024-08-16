@@ -2,13 +2,37 @@ import browser from 'webextension-polyfill';
 
 export type Agent = { port?: browser.Runtime.Port; data: any };
 
+export type GetAgentOptions = {
+    context?: PorterContext;
+    index?: number;
+    subIndex?: number;
+};
 export type MessageAction = {
     [key: string]: any;
 }
 
+export type AgentLocation = {
+    index: number;
+    subIndex?: number;
+}
+
+export type Listener<T extends keyof PorterEvents> = (arg: PorterEvents[T]) => void;
+
+export type MessageListener = {
+    config: MessageConfig;
+    listener: Listener<'onMessage'>;
+}
+
+export type AgentMetadata = {
+    key: string;
+    connectionType: ConnectContext;
+    context: PorterContext;
+    location: AgentLocation;
+}
 export interface PorterEvents {
-    onConnect: { key: string, connectContext: ConnectContext; porterContext: PorterContext; portDetails: PortDetails };
-    onDisconnect: { key: string, connectContext: ConnectContext; porterContext: PorterContext; portDetails: PortDetails };
+    onConnect: AgentMetadata;
+    onDisconnect: AgentMetadata;
+    onMessage: AgentMetadata & { message: Message<any> };
 }
 
 export enum ConnectContext {
@@ -21,10 +45,11 @@ export enum ConnectContext {
 export enum PorterContext {
     ContentScript = 'contentscript',
     Devtools = 'devtools',
-    Sidebar = 'sidebar',
+    Sidepanel = 'Sidepanel',
     Options = 'options',
     Popup = 'popup',
     Background = 'background',
+    Unknown = 'unknown',
 }
 
 export type Message<K extends keyof MessageAction> = {
@@ -35,8 +60,8 @@ export type Message<K extends keyof MessageAction> = {
 export type MessageConfig = {
     [K in keyof MessageAction]: (
         message: Message<K>,
-        port: browser.Runtime.Port,
-        senderDetails?: PortDetails) => void
+        agent?: { key: string, context: PorterContext, location: AgentLocation }
+    ) => void
 };
 
 export type PortDetails = {
