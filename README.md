@@ -9,7 +9,6 @@ Porter scales from a simple Web Extensions sendMessage replacement to an enterpr
 - Utilities for managing ports, messages and senders.
 - Faster and less memory than message sending
 - Many scenarios available -- Sidepanel, Devtools, Popup, and of course Content Scripts
-- Can split content scripts out by frameId for ultimately granular message passing.
 
 Examples: Coming soon.
 
@@ -19,49 +18,80 @@ Porter can be sourced anywhere, but the Service Worker usually makes the most se
 
 
 ```typescript
-// service worker
-import { Porter } from 'porter-source'
+// service worker environment
+import { source } from 'porter-source'
 
-const porter = new Porter();
+const [post, setMessages, onConnect] = source();
 
 // set up message handlers for incoming messages
-porter.onMessage({
-    hello_porter: (message, port, senderDetails) => {
+setMessages({
+    hello_porter: (message, agentMetadata) => {
         console.log('Hello porter heard with message: ', message);
         // messages come with some convenience info
-        console.log(`Hello porter came from tabId: ${senderDetails.tabId}, frameId: ${senderDetails.frameId}, url: tabId: ${senderDetails.url} `);
+        console.log(`Hello porter came from: ${agentMetadata.key}, frameId: ${agentMetadata.frameId}, tabId: ${agentMetadata.tabId} `);
     },
-    foo: (message, port) => {
+    foo: (message, {key}) => {
         // send back a message using the port from the message received
-        port.post({action: 'bar'})
+        post({action: 'bar'}, key)
     }
 });
+// Messages are in the format {action: string, payload: any}
+const message = {action: 'hello-agent', payload: { value: 3 }}
+// targets are in the format {context: PorterContext | string, location?: {AgentLocation}}
+// where PorterContext is 
+type PorterContext = {
+    'ContentScript'
+    'Devtools',
+    'Sidepanel',
+    'Unknown'
+}
+// Or you can call it whatever you want with a string.
 
-// send a message to a particular content-script
-porter.post({tabId: 12, frameId: 0}, {action: 'hello-target', payload: { value: 3 }});
+// send a message to a particular frame
+const target = {context: PorterContext.ContentScript, location: {index: 1, subIndex: 123}}
+post(message, target);
 
+// send a message to all content scripts
+const target = {context: PorterContext.ContentScript}
+post(message, target);
 
-// or send a message to a connected 'agent' such as a Sidepanel
-porter.post(PorterContext.Sidepanel, {action: 'hello-Sidepanel', payload: {}})
+// send a message to all frames for a tab
+const tabId = 123;
+const target = {context: PorterContext.ContentScript, location: {index: tabId}}
+post(message, target);
+
+// Similarly can target other contexts:
+const target = {context: PorterContext.Devtools}
+post(message, target);
+
+// Or when you receive a message, can respond back to that sender without needing to know the particulars:
+setMessages({
+    from_devtools: (message, {key}) => {
+        post({'hello_back'}, key)
+    },
+});
 
 ```
 
 ### Use Porter in your 'Agents', that is, your Content Scripts, Sidepanels, Devtools, Popups, etc.
 
 ```typescript
-import { PorterAgent, PorterContext } from 'porter-source'
+import { connect } from 'porter-source'
 
-const porter = new PorterAgent(PorterContext.ContentScript)
+const [post, setMessages] = new connect()
 
 // Just like the source Porter, we set up any message listeners we may want.
-porter.onMessage({
+setMessages({
     bar: (message, port) => {
         // woohoo
     }
 });
 
 // And send messages to the source
-porter.post({action: 'foo'});
+post({action: 'foo'});
+
+// Or bypass the service worker and send a message directly to another target
+post({action: 'foo'}, PorterContext.Devtools);
 ```
 
 ### Async actions
@@ -71,7 +101,7 @@ Just make the onMessage handler function an async function, in either the agent 
 ```typescript
 // Usual setup, except we can make individual message handlers async
 porter.onMessage({
-    bar: async (message, port) => {
+    bar: async (message, agentMetadata) => {
         // await myFunction() {}
     }
 });
