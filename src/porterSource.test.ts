@@ -15,7 +15,6 @@ jest.mock('webextension-polyfill', () => ({
 jest.mock('./porter.utils', () => ({
     ...jest.requireActual('./porter.utils'),
     isServiceWorker: jest.fn().mockReturnValue(true),
-    getPortDetails: jest.fn().mockReturnValue({}),
 }));
 
 
@@ -46,7 +45,7 @@ describe('PorterSource', () => {
     });
 
     test('getAgent should return null for non-existent agent', () => {
-        const agent = porterSource.getAgent(PorterContext.ContentScript);
+        const agent = porterSource.getAgent({ context: PorterContext.ContentScript });
         expect(agent).toBeNull();
     });
 
@@ -160,14 +159,14 @@ describe('PorterSource', () => {
 
         test('should post message to connected content script', () => {
             const message: Message<any> = { action: 'testAction', payload: 'testPayload' };
-            porterSource.post(message, PorterContext.ContentScript, { tabId: 1, frameId: 0 });
+            porterSource.post(message, PorterContext.ContentScript, { index: 1, subIndex: 0 });
 
             expect(mockPort.postMessage).toHaveBeenCalledWith(message);
         });
 
         test('should post message to all frames in a tab if frameId is not specified', () => {
             const message: Message<any> = { action: 'testAction', payload: 'testPayload' };
-            porterSource.post(message, PorterContext.ContentScript, { tabId: 1, frameId: 0 });
+            porterSource.post(message, PorterContext.ContentScript, { index: 1, subIndex: 0 });
 
             expect(mockPort.postMessage).toHaveBeenCalledWith(message);
         });
@@ -176,7 +175,7 @@ describe('PorterSource', () => {
             const message: Message<any> = { action: 'testAction', payload: 'testPayload' };
             const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
 
-            porterSource.post(message, PorterContext.ContentScript, { tabId: 2, frameId: 0 });
+            porterSource.post(message, PorterContext.ContentScript, { index: 2, subIndex: 0 });
 
             expect(mockPort.postMessage).not.toHaveBeenCalled();
             expect(consoleSpy).toHaveBeenCalledWith('No agent found for tab 2, frame 0');
@@ -184,21 +183,21 @@ describe('PorterSource', () => {
             consoleSpy.mockRestore();
         });
 
-        test('should post message to specific context (e.g., Sidebar)', () => {
-            // Create a mock sidebar port
-            const mockSidebarPort: Runtime.Port = {
+        test('should post message to specific context (e.g., Sidepanel)', () => {
+            // Create a mock Sidepanel port
+            const mockSidepanelPort: Runtime.Port = {
                 ...mockPort,
-                name: 'porter-sidebar',
+                name: 'porter-Sidepanel',
             };
 
-            // Connect the sidebar
+            // Connect the Sidepanel
             const connectListener = (browser.runtime.onConnect.addListener as jest.Mock).mock.calls[0][0];
-            connectListener(mockSidebarPort);
+            connectListener(mockSidepanelPort);
 
             const message: Message<any> = { action: 'testAction', payload: 'testPayload' };
-            porterSource.post(message, PorterContext.Sidebar);
+            porterSource.post(message, PorterContext.Sidepanel);
 
-            expect(mockSidebarPort.postMessage).toHaveBeenCalledWith(message);
+            expect(mockSidepanelPort.postMessage).toHaveBeenCalledWith(message);
         });
     });
 });
