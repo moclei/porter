@@ -91,19 +91,19 @@ export class PorterAgent {
     }
 
     private isDevtools() {
-        console.log('Porter, isDevtools, browser.devtools !== undefined  ', browser.devtools !== undefined);
-        console.log('Porter, isDevtools, window.origin.startsWith(devtools://)  ', window.origin.startsWith('devtools://'));
-        console.log('Porter, isDevtools, window.origin: ', window.origin);
-        console.log('Porter, isDevtools, window.location: ', window.location);
-        console.log('Porter, isDevtools, window: ', window);
+        // console.log('Porter, isDevtools, browser.devtools !== undefined  ', browser.devtools !== undefined);
+        // console.log('Porter, isDevtools, window.origin.startsWith(devtools://)  ', window.origin.startsWith('devtools://'));
+        // console.log('Porter, isDevtools, window.origin: ', window.origin);
+        // console.log('Porter, isDevtools, window.location: ', window.location);
+        // console.log('Porter, isDevtools, window: ', window);
         return browser.devtools !== undefined;
     }
 
     private isSidePanel() {
-        console.log('Porter, isSidePanel: ', chrome !== undefined && chrome.sidePanel !== undefined && window.origin.startsWith('chrome-extension://'));
-        console.log('Porter, isSidePanel, chrome !== undefined ? ', chrome !== undefined);
-        console.log('Porter, isSidePanel, chrome.sidePanel !== undefined  ? ', chrome.sidePanel !== undefined);
-        console.log('Porter, isSidePanel, window.origin.startsWith(chrome-extension://)  ? ', window.origin.startsWith('chrome-extension://'));
+        // console.log('Porter, isSidePanel: ', chrome !== undefined && chrome.sidePanel !== undefined && window.origin.startsWith('chrome-extension://'));
+        // console.log('Porter, isSidePanel, chrome !== undefined ? ', chrome !== undefined);
+        // console.log('Porter, isSidePanel, chrome.sidePanel !== undefined  ? ', chrome.sidePanel !== undefined);
+        // console.log('Porter, isSidePanel, window.origin.startsWith(chrome-extension://)  ? ', window.origin.startsWith('chrome-extension://'));
         return chrome !== undefined && chrome.sidePanel !== undefined && window.origin.startsWith('chrome-extension://');
     }
 
