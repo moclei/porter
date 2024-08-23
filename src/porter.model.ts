@@ -23,6 +23,15 @@ export type TargetAgent = {
     location?: AgentLocation;
 };
 
+export type PostTarget =
+    | number  // tabId
+    | string  // key
+    | {
+        context: PorterContext;
+        index?: number;
+        subIndex?: number;
+    };
+
 export type GetAgentOptions = {
     context?: PorterContext;
     index?: number;

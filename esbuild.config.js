@@ -15,6 +15,7 @@ Promise.all([
     outfile: 'dist/cjs/index.js',
     platform: 'node',
     target: ['node14'],
+    drop: ['console'],
     format: 'cjs',
   }),
   esbuild.build({
@@ -22,6 +23,7 @@ Promise.all([
     outfile: 'dist/esm/index.js',
     platform: 'neutral',
     target: ['es2018'],
+    drop: ['console'],
     format: 'esm',
   }),
 ]).catch(() => process.exit(1));
