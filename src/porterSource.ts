@@ -1,5 +1,5 @@
-import browser, { Runtime, Tabs } from 'webextension-polyfill';
-import { AgentLocation, AgentMetadata, ConnectContext, Listener, Message, MessageConfig, MessageListener, PorterEvent } from './porter.model';
+import browser, { Runtime } from 'webextension-polyfill';
+import { AgentMetadata, ConnectContext, Listener, Message, MessageConfig, MessageListener, PorterEvent, PostTarget } from './porter.model';
 import { Agent, PorterContext } from './porter.model';
 import { isServiceWorker } from './porter.utils';
 
@@ -63,13 +63,15 @@ export class PorterSource {
     private emitMessage(messageEvent: PorterEvent['onMessage']) {
         console.log('PorterSource, message: ', messageEvent);
         if (!!messageEvent.message.target) {
+            // This is a relay message.
             const { context, location } = messageEvent.message.target;
             if (location) {
-                this.post(messageEvent.message, context as PorterContext, location);
+                this.post(messageEvent.message, { context: context as PorterContext, ...location });
             } else {
-                this.post(messageEvent.message, context);
+                this.post(messageEvent.message, { context: context as PorterContext });
             }
         }
+        // This is a message to the service worker.
         this.messageListeners.forEach(({ listener }) => listener(messageEvent as PorterEvent['onMessage']));
     }
 
@@ -112,34 +114,48 @@ export class PorterSource {
             .map(([_, agent]) => agent);
     }
 
-    public post(message: Message<any>, context: PorterContext): void;
-    public post(message: Message<any>, key: string): void;
-    public post(message: Message<any>, context: PorterContext, location: Partial<AgentLocation>): void;
-    public post(
-        message: Message<any>,
-        contextOrKey: PorterContext | string,
-        location?: Partial<AgentLocation>
-    ): void {
-        if (this.isPorterContext(contextOrKey)) {
-            if (!location) {
-                // Post to all agents of this context
-                this.postToAgents(message, (agentKey) => agentKey.startsWith(`${contextOrKey}:`));
-            } else if (location.index !== undefined) {
-                if (contextOrKey === PorterContext.ContentScript && location.subIndex !== undefined) {
-                    // Post to specific content script
-                    const key = this.getKey(contextOrKey, location.index, location.subIndex);
-                    this.postToAgents(message, (agentKey) => agentKey === key);
-                } else {
-                    // Post to all agents with matching context and index
-                    const partialKey = `${contextOrKey}:${location.index}`;
-                    this.postToAgents(message, (agentKey) => agentKey.startsWith(partialKey));
-                }
-            } else {
-                console.warn('Invalid location provided for post method');
-            }
+    public post(message: Message<any>, target?: PostTarget): void {
+        if (target === undefined) {
+            // Broadcast to all agents
+            this.broadcastMessage(message);
+        } else if (typeof target === 'number') {
+            // Post to specific tab (content script at frameId 0)
+            this.postToTab(message, target);
+        } else if (typeof target === 'string') {
+            // Post to specific agent by key
+            this.postToKey(message, target);
         } else {
-            // Assume it's a key (partial or full)
-            this.postToAgents(message, (agentKey) => agentKey.startsWith(contextOrKey));
+            // Post based on options object
+            this.postWithOptions(message, target);
+        }
+    }
+
+    private postToTab(message: Message<any>, tabId: number): void {
+        const key = `${PorterContext.ContentScript}:${tabId}:0`;
+        this.postToKey(message, key);
+    }
+
+    // Requires a specified context. Since the other overloads from the public post method
+    // assume a content-script context, this method can be inferred to be non-content-script.
+    private postWithOptions(message: Message<any>, options: PostTarget & object): void {
+        let key = this.getKey(options.context, options.index, options.subIndex);
+        this.postToKey(message, key);
+    }
+
+    private broadcastMessage(message: Message<any>): void {
+        this.agents.forEach(agent => {
+            if (agent.port) {
+                agent.port.postMessage(message);
+            }
+        });
+    }
+
+    private postToKey(message: Message<any>, key: string): void {
+        const agent = this.agents.get(key);
+        if (agent?.port) {
+            agent.port.postMessage(message);
+        } else {
+            console.warn(`No agent found for key: ${key}`);
         }
     }
 
@@ -158,6 +174,22 @@ export class PorterSource {
 
     public getData(key: string): any {
         return this.agents.get(key)?.data || {};
+    }
+
+    public getMetadata(key: string): AgentMetadata | null {
+        const agent = this.agents.get(key);
+        if (!agent) return null;
+        // based on the key being in the format `${context}:${index}` + (subIndex ? `:${subIndex}` : '') we want to return an object with context, index, and subIndex
+        const [context, index, subIndex] = key.split(':');
+        return {
+            key,
+            connectionType: ConnectContext.NewAgent, // Todo: this cannot be determined from the key. Should we bother trying to determine it?
+            context: context as PorterContext,
+            location: {
+                index: parseInt(index),
+                subIndex: subIndex ? parseInt(subIndex) : undefined
+            }
+        };
     }
 
     public setData(key: string, data: any) {
@@ -223,7 +255,7 @@ export class PorterSource {
                 connectContext = ConnectContext.RefreshConnection;
             }
         } else {
-            index = (this.contextCounters.get(adjustedContext) || 0) + 1;
+            index = (this.contextCounters.get(adjustedContext) || 0);
             this.contextCounters.set(adjustedContext, index + 1);
             connectContext = ConnectContext.NewAgent
         }
@@ -268,7 +300,20 @@ export class PorterSource {
         this.contextCounters.set(context, relevantAgents.length);
     }
 
-    private getKey(context: PorterContext, index: number, subIndex?: number): string {
+
+    // Todo: This is a standalone function, should be worked into getAgent
+    public buildAgentKey(context: PorterContext, index: number, subIndex?: number): string {
+        if (subIndex === undefined) {
+            if (context === PorterContext.ContentScript) {
+                return `${context}:${index}:0`;
+            }
+            return `${context}:${index}`;
+        }
+        // Return a specific content script agent
+        return `${context}:${index}:${subIndex}`;
+    }
+
+    private getKey(context: PorterContext, index: number = 0, subIndex?: number): string {
         console.log("PorterSurce: Getting key for context, index, subIndex: ", context, index, subIndex);
         return `${context}:${index}` + (subIndex ? `:${subIndex}` : '');
     }
@@ -283,7 +328,7 @@ export class PorterSource {
 }
 
 export function source(porterNamespace: string = 'porter'): [
-    (message: Message<any>, contextOrKey: PorterContext | string, location?: Partial<AgentLocation>) => void,
+    (message: Message<any>, target?: PostTarget) => void,
     (config: MessageConfig) => () => void,
     (listener: Listener<'onConnect'>) => () => void,
     (listener: Listener<'onDisconnect'>) => () => void,
@@ -295,4 +340,16 @@ export function source(porterNamespace: string = 'porter'): [
         instance.onConnect.bind(instance),
         instance.onDisconnect.bind(instance),
     ];
+}
+
+export function getMetadata(key: string): AgentMetadata | null {
+    return PorterSource.getInstance().getMetadata(key);
+}
+
+export function getKey(options: {
+    index: number;
+    subIndex?: number;
+    context: PorterContext
+}): string | null {
+    return PorterSource.getInstance().buildAgentKey(options.context, options.index, options.subIndex);
 }
