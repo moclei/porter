@@ -315,7 +315,7 @@ export class PorterSource {
 
     private getKey(context: PorterContext, index: number = 0, subIndex?: number): string {
         console.log("PorterSurce: Getting key for context, index, subIndex: ", context, index, subIndex);
-        return `${context}:${index}` + (subIndex !== undefined ? `:${subIndex}` : '');
+        return `${context}:${index}` + (subIndex !== undefined ? `:${subIndex}` : ':0');
     }
 
     private isPorterContext(value: PorterContext | string): value is PorterContext {
