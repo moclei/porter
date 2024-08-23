@@ -138,6 +138,7 @@ export class PorterSource {
     // Requires a specified context. Since the other overloads from the public post method
     // assume a content-script context, this method can be inferred to be non-content-script.
     private postWithOptions(message: Message<any>, options: PostTarget & object): void {
+        console.log('PorterSource: Posting with options: ', options);
         let key = this.getKey(options.context, options.index, options.subIndex);
         this.postToKey(message, key);
     }
@@ -259,7 +260,6 @@ export class PorterSource {
             this.contextCounters.set(adjustedContext, index + 1);
             connectContext = ConnectContext.NewAgent
         }
-
         const agentKey = this.getKey(adjustedContext, index, subIndex);
         console.log('PorterSource: Adding context agent, agentKey: ', agentKey);
         this.setupAgent(port, adjustedContext, agentKey, connectContext, { index, subIndex });
@@ -288,6 +288,7 @@ export class PorterSource {
     }
 
     private reindexContextAgents(context: PorterContext) {
+        console.log('PorterSource: Reindexing agents for context: ', context);
         const relevantAgents = this.getAgentsByContext(context);
         relevantAgents.forEach((agent, index) => {
             const oldKey = Array.from(this.agents.entries()).find(([_, a]) => a === agent)?.[0];
@@ -351,5 +352,6 @@ export function getKey(options: {
     subIndex?: number;
     context: PorterContext
 }): string | null {
+    console.log("PorterSource: getKey called externally with options: ", options);
     return PorterSource.getInstance().buildAgentKey(options.context, options.index, options.subIndex);
 }
