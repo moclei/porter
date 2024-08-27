@@ -1,5 +1,5 @@
 import browser, { Extension, Runtime } from 'webextension-polyfill';
-import { Agent, Message, MessageConfig, PorterContext, TargetAgent } from './porter.model';
+import { Agent, AgentMetadata, Message, MessageConfig, PorterContext, TargetAgent } from './porter.model';
 // import { log } from './porter.utils';
 
 export class PorterAgent {
@@ -68,9 +68,6 @@ export class PorterAgent {
 
         if (handler) {
             console.log('Porter: found handler, calling with message');
-            const meta: AgentMetadata = {
-
-            }
             handler(message);
         } else {
             console.log('Porter, port and message: ', port, { action: 'error', payload: `No handler for message with action: ${action}` });
