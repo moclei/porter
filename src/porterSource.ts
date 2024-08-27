@@ -261,6 +261,7 @@ export class PorterSource {
             this.contextCounters.set(adjustedContext, index + 1);
             connectContext = ConnectContext.NewAgent
         }
+        console.log('PorterSource: Adding agent');
         const agentKey = this.getKey(adjustedContext, index, subIndex);
         console.log('PorterSource: Adding context agent, agentKey: ', agentKey);
         this.setupAgent(port, adjustedContext, agentKey, connectContext, { index, subIndex });

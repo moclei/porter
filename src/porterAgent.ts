@@ -55,7 +55,8 @@ export class PorterAgent {
     }
 
     private handleMessage(port: Runtime.Port, message: any) {
-        console.warn('Porter: handleMessage ', message, port);
+        console.log('Porter: handleMessage ', message, port);
+        console.log('Porter: handleMessage, messageConfig: ', message, port);
         if (!this.config) {
             console.warn('Porter: No message handler configured, message: ', message);
             return;
@@ -66,6 +67,10 @@ export class PorterAgent {
         const handler = this.config[action];
 
         if (handler) {
+            console.log('Porter: found handler, calling with message');
+            const meta: AgentMetadata = {
+
+            }
             handler(message);
         } else {
             console.log('Porter, port and message: ', port, { action: 'error', payload: `No handler for message with action: ${action}` });
