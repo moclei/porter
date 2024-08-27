@@ -140,6 +140,7 @@ export class PorterSource {
     private postWithOptions(message: Message<any>, options: PostTarget & object): void {
         console.log('PorterSource: Posting with options: ', options);
         let key = this.getKey(options.context, options.index, options.subIndex);
+        console.log('PorterSource: Posting with options, got key: ', key);
         this.postToKey(message, key);
     }
 
@@ -156,7 +157,7 @@ export class PorterSource {
         if (agent?.port) {
             agent.port.postMessage(message);
         } else {
-            console.warn(`No agent found for key: ${key}`);
+            console.warn(`No agent found for key: ${key}. Agents are: `, Array.from(this.agents.keys()));
         }
     }
 
