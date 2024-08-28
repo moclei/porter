@@ -10,16 +10,20 @@ export class PorterSource {
     private listeners: Map<keyof PorterEvent, Set<Listener<keyof PorterEvent>>> = new Map();
     private messageListeners: Set<MessageListener> = new Set();
 
-    private constructor(private porterNamespace: string = 'porter') {
+    private constructor(private namespace: string = 'porter') {
         if (!isServiceWorker()) {
-            console.warn('PorterSource: Can only create porter source in service worker');
+            this.warn('Can only create porter source in service worker');
         }
         browser.runtime.onConnect.addListener(this.handleConnection.bind(this));
     }
 
-    public static getInstance(porterNamespace: string = 'porter'): PorterSource {
-        if (!PorterSource.instance) {
-            PorterSource.instance = new PorterSource(porterNamespace);
+    public static getInstance(namespace: string = 'porter'): PorterSource {
+        console.log('PorterSource getInstance: Getting instance with namespace: ', namespace);
+        if (!PorterSource.instance || PorterSource.instance.namespace !== namespace) {
+            console.log('PorterSource getInstance: instance did not exist, creating: ', namespace);
+            PorterSource.instance = new PorterSource(namespace);
+        } else {
+            console.log('PorterSource getInstance: instance already existed, returning it with namespace: ', PorterSource.instance.namespace);
         }
         return PorterSource.instance;
     }
@@ -61,7 +65,7 @@ export class PorterSource {
     }
 
     private emitMessage(messageEvent: PorterEvent['onMessage']) {
-        console.log('PorterSource, message: ', messageEvent);
+        this.log('message: ', messageEvent);
         if (!!messageEvent.message.target) {
             // This is a relay message.
             const { context, location } = messageEvent.message.target;
@@ -76,7 +80,7 @@ export class PorterSource {
     }
 
     private emit<T extends keyof PorterEvent>(event: T, arg: PorterEvent[T]) {
-        console.log('Porter emitMessage: ', arg);
+        this.log('emitMessage: ', arg);
         this.listeners.get(event)?.forEach(listener => (listener as Listener<T>)(arg));
     }
 
@@ -102,6 +106,14 @@ export class PorterSource {
         return this.agents.get(`${options.context}:${options.index}`) || null;
     }
 
+    private getAgentsNames(): string[] {
+        return Array.from(this.agents.keys());
+    }
+
+    private getAgentsMetadata(): AgentMetadata[] {
+        return Array.from(this.agents.keys()).map(key => this.getMetadata(key)).filter(meta => meta !== null) as AgentMetadata[];
+    }
+
     private getAgentsByContext(context: PorterContext): Agent[] {
         return Array.from(this.agents.entries())
             .filter(([key, _]) => key.startsWith(`${context}:`))
@@ -115,6 +127,8 @@ export class PorterSource {
     }
 
     public post(message: Message<any>, target?: PostTarget): void {
+        this.log('Post request received for message: ', message);
+        this.log('Post request had a target of: ', target);
         if (target === undefined) {
             // Broadcast to all agents
             this.broadcastMessage(message);
@@ -138,9 +152,9 @@ export class PorterSource {
     // Requires a specified context. Since the other overloads from the public post method
     // assume a content-script context, this method can be inferred to be non-content-script.
     private postWithOptions(message: Message<any>, options: PostTarget & object): void {
-        console.log('PorterSource: Posting with options: ', options);
+        this.log('Posting with options: ', options);
         let key = this.getKey(options.context, options.index, options.subIndex);
-        console.log('PorterSource: Posting with options, got key: ', key);
+        this.log('Posting with options, got key: ', key);
         this.postToKey(message, key);
     }
 
@@ -157,7 +171,7 @@ export class PorterSource {
         if (agent?.port) {
             agent.port.postMessage(message);
         } else {
-            console.warn(`No agent found for key: ${key}. Agents are: `, Array.from(this.agents.keys()));
+            this.warn(`No agent found for key: ${key}. Agents are: `, Array.from(this.agents.keys()));
         }
     }
 
@@ -170,7 +184,7 @@ export class PorterSource {
             }
         });
         if (!agentFound) {
-            console.warn('No matching agents found for the given criteria');
+            this.warn('No matching agents found for the given criteria');
         }
     }
 
@@ -194,31 +208,40 @@ export class PorterSource {
         };
     }
 
+    // Todo: Feels messy that we have both AgentMetadata and PostTarget. Should we consolidate?
+    public getTarget(agentMetadata: AgentMetadata): PostTarget | null {
+        return {
+            context: agentMetadata.context as PorterContext,
+            index: agentMetadata.location.index,
+            subIndex: agentMetadata.location.subIndex ?? undefined
+        }
+    };
+
     public setData(key: string, data: any) {
         const agent = this.agents.get(key);
         if (agent) {
             agent.data = data;
         } else {
-            console.warn('PorterSource: agent does not exist to set data on: ', key);
+            this.warn('agent does not exist to set data on: ', key);
         }
     }
 
     private handleConnection(port: Runtime.Port) {
-        console.log('Handling connection for port:', port.name);
+        this.log('Handling connection for port:', port.name);
         if (!port.name) {
-            console.warn('PorterSource: Port name not provided');
+            this.warn('Port name not provided');
             return;
         }
-        console.log("PorterSource: isContentScript? ", this.isContentScript(port));
+        this.log("handleConnection, isContentScript? ", this.isContentScript(port));
         const connectCtx = port.name.split('-');
-        console.log('Connect context:', connectCtx);
+        this.log('context:', connectCtx);
         if (connectCtx.length === 3) {
             //Todo: Add relay connections
-            console.warn('PorterSource: Relay connections not yet supported');
+            this.warn('Relay connections not yet supported');
         } else if (connectCtx.length === 2) {
             this.addAgent(port, connectCtx[1] as PorterContext);
         } else {
-            console.warn('PorterSource: Invalid port name');
+            this.warn('Invalid port name');
         }
         this.printAgents();
     }
@@ -234,7 +257,7 @@ export class PorterSource {
     }
 
     private addAgent(port: Runtime.Port, context: PorterContext) {
-        console.log('PorterSource: Adding context agent. port and context: ', port, context);
+        this.log('Adding context agent. port and context: ', port, context);
         let adjustedContext = context;
         let index = 0;
         let subIndex;
@@ -261,27 +284,34 @@ export class PorterSource {
             this.contextCounters.set(adjustedContext, index + 1);
             connectContext = ConnectContext.NewAgent
         }
-        console.log('PorterSource: Adding agent');
+        this.log('Adding agent');
         const agentKey = this.getKey(adjustedContext, index, subIndex);
-        console.log('PorterSource: Adding context agent, agentKey: ', agentKey);
+        this.log('Adding context agent, agentKey: ', agentKey);
         this.setupAgent(port, adjustedContext, agentKey, connectContext, { index, subIndex });
     }
 
     private setupAgent(port: Runtime.Port, porterContext: PorterContext, key: string, connectContext: ConnectContext, location: { index: number, subIndex?: number }) {
         const agent = { port, data: null };
         this.agents.set(key, agent);
-        const agentMetadata = { key, connectionType: connectContext, context: porterContext, location }
+        const agentMetadata: AgentMetadata = { key, connectionType: connectContext, context: porterContext, location }
         this.emit('onConnect', agentMetadata);
+        this.confirmConnection(port, agentMetadata);
         port.onMessage.addListener((message: any) => this.handleMessage(message, agentMetadata));
         port.onDisconnect.addListener(() => this.handleDisconnect(agentMetadata));
     }
+
+    private confirmConnection(port: Runtime.Port, agentMeta: AgentMetadata) {
+        this.log('sending confirmation back to porter agent ', port, { action: 'porter-handshake', payload: `Porter: Connected to ${port.name}` });
+        port.postMessage({ action: 'porter-handshake', payload: { meta: agentMeta, currentConnections: this.getAgentsMetadata() } });
+    }
+
 
     private handleMessage(message: any, agentMetadata: AgentMetadata) {
 
         this.emitMessage({ ...agentMetadata, message })
     }
     private handleDisconnect(agentMetadata: AgentMetadata) {
-        console.log('PorterSource, disconnected from agent: ', agentMetadata);
+        this.log('disconnected from agent: ', agentMetadata);
         this.emit('onDisconnect', agentMetadata);
         this.agents.delete(agentMetadata.key);
         if (!agentMetadata.location || !agentMetadata.location.subIndex) {
@@ -290,7 +320,7 @@ export class PorterSource {
     }
 
     private reindexContextAgents(context: PorterContext) {
-        console.log('PorterSource: Reindexing agents for context: ', context);
+        this.log('Reindexing agents for context: ', context);
         const relevantAgents = this.getAgentsByContext(context);
         relevantAgents.forEach((agent, index) => {
             const oldKey = Array.from(this.agents.entries()).find(([_, a]) => a === agent)?.[0];
@@ -317,7 +347,7 @@ export class PorterSource {
     }
 
     private getKey(context: PorterContext, index: number = 0, subIndex?: number): string {
-        console.log("PorterSurce: Getting key for context, index, subIndex: ", context, index, subIndex);
+        this.log("Getting key for context, index, subIndex: ", context, index, subIndex);
         return `${context}:${index}` + (subIndex !== undefined ? `:${subIndex}` : ':0');
     }
 
@@ -326,17 +356,26 @@ export class PorterSource {
     }
 
     private printAgents() {
-        console.log('PorterSource: Agents are: ', this.agents);
+        this.log('Agents are: ', this.agents);
+    }
+    private log(message: string, ...args: any[]) {
+        console.log(`PorterSource: ${this.namespace}: ` + message, ...args);
+    }
+    private error(message: string, ...args: any[]) {
+        console.error(`PorterSource: ${this.namespace}: ` + message, ...args);
+    }
+    private warn(message: string, ...args: any[]) {
+        console.warn(`PorterSource: ${this.namespace}: ` + message, ...args);
     }
 }
 
-export function source(porterNamespace: string = 'porter'): [
+export function source(namespace: string = 'porter'): [
     (message: Message<any>, target?: PostTarget) => void,
     (config: MessageConfig) => () => void,
     (listener: Listener<'onConnect'>) => () => void,
     (listener: Listener<'onDisconnect'>) => () => void,
 ] {
-    const instance = PorterSource.getInstance(porterNamespace);
+    const instance = PorterSource.getInstance(namespace);
     return [
         instance.post.bind(instance),
         instance.onMessage.bind(instance),
@@ -347,6 +386,10 @@ export function source(porterNamespace: string = 'porter'): [
 
 export function getMetadata(key: string): AgentMetadata | null {
     return PorterSource.getInstance().getMetadata(key);
+}
+
+export function getTarget(agentMetadata: AgentMetadata): PostTarget | null {
+    return PorterSource.getInstance().getTarget(agentMetadata);
 }
 
 export function getKey(options: {
