@@ -2,27 +2,26 @@ const esbuild = require('esbuild');
 const { nodeExternalsPlugin } = require('esbuild-node-externals');
 
 const shared = {
-  entryPoints: ['src/index.ts'],
+  entryPoints: ['src/index.ts', 'src/react/index.ts'],
   bundle: true,
   minify: true,
   sourcemap: true,
   plugins: [nodeExternalsPlugin()],
+  external: ['react'],
 };
 
 Promise.all([
   esbuild.build({
     ...shared,
-    outfile: 'dist/cjs/index.js',
+    outdir: 'dist/cjs',
     platform: 'node',
-    drop: ['console'],
     target: ['node14'],
     format: 'cjs',
   }),
   esbuild.build({
     ...shared,
-    outfile: 'dist/esm/index.js',
+    outdir: 'dist/esm',
     platform: 'neutral',
-    drop: ['console'],
     target: ['es2018'],
     format: 'esm',
   }),

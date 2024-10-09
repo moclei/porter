@@ -47,7 +47,9 @@ export class PorterAgent {
     }
 
     public onMessage(config: MessageConfig) {
+        this.log('Setting message handler config: ', config);
         this.config = config;
+        this.agent?.port?.postMessage({ action: 'porter-messages-established' });
     }
 
     public post(message: Message<any>, target?: TargetAgent) {
@@ -73,11 +75,9 @@ export class PorterAgent {
         this.log('handleMessage, message: ', message);
 
         if (!this.config) {
-            this.warn('No message handler configured, message: ', message);
+            this.warn('No message handler configured, config: ', this.config);
             return;
         }
-
-        this.log('handleMessage, config: ', this.config);
         const action = message.action;
         let handler;
         if (message.action.startsWith('porter')) {
@@ -112,7 +112,7 @@ export class PorterAgent {
     }
 
     private determineContext(): PorterContext {
-        this.isContentScript()
+        // this.isContentScript()
         if (this.isDevtools()) {
             return PorterContext.Devtools;
         } else if (this.isSidePanel()) {
@@ -143,18 +143,18 @@ export class PorterAgent {
 
     private isContentScript() {
         const isExtensionPage = window.location.protocol === 'chrome-extension:';
-        this.log('isContentScript: ', !isExtensionPage);
+        // this.log('isContentScript: ', !isExtensionPage);
         return !isExtensionPage;
     }
 
     private log(message: string, ...args: any[]) {
-        console.log(`PorterAgent ${this.namespace} ${this.metadata?.key || ''}: ` + message, ...args);
+        console.log(`PorterAgent [${this.namespace}-${this.metadata?.key || ''}], ` + message, ...args);
     }
     private error(message: string, ...args: any[]) {
-        console.error(`PorterAgent ${this.namespace} ${this.metadata?.key || ''}: ` + message, ...args);
+        console.error(`PorterAgent [${this.namespace}-${this.metadata?.key || ''}], ` + message, ...args);
     }
     private warn(message: string, ...args: any[]) {
-        console.warn(`PorterAgent ${this.namespace} ${this.metadata?.key || ''}: ` + message, ...args);
+        console.warn(`PorterAgent [${this.namespace}-${this.metadata?.key || ''}], ` + message, ...args);
     }
 }
 

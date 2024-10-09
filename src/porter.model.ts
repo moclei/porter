@@ -48,6 +48,7 @@ export type MessageListener = {
 export interface PorterEvent {
     onConnect: AgentMetadata;
     onDisconnect: AgentMetadata;
+    onMessagesSet: AgentMetadata;
     onMessage: AgentMetadata & { message: Message<any> };
 }
 
@@ -66,6 +67,7 @@ export enum PorterContext {
     Popup = 'popup',
     Background = 'background',
     Unknown = 'unknown',
+    React = 'react',
 }
 
 export type Message<K extends keyof MessageAction> = {
