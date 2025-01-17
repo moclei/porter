@@ -81,5 +81,3 @@ export class Logger {
 }
 
 export { isValidPort, isValidSender, isServiceWorker };
-
-e
