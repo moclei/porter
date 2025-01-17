@@ -1,7 +1,8 @@
 import { Runtime } from "webextension-polyfill";
 
 function isServiceWorker() {
-    return !self.window || self.window.hasOwnProperty('ServiceWorkerGlobalScope');
+    return typeof ServiceWorkerGlobalScope !== 'undefined' 
+        && self instanceof ServiceWorkerGlobalScope;
 }
 
 function isValidPort(port: Runtime.Port): port is Runtime.Port & { sender: Runtime.MessageSender & { tab: { id: number }; frameId: number } } {
@@ -12,25 +13,73 @@ function isValidSender(sender: Runtime.MessageSender): sender is Runtime.Message
     return !(!sender || !sender.tab || sender.frameId === undefined || sender.tab.id === undefined);
 }
 
-export class EventEmitter<T> {
-    private listeners: { [K in keyof T]?: ((arg: T[K]) => void)[] } = {};
+export enum LogLevel {
+    ERROR = 0,
+    WARN = 1,
+    INFO = 2,
+    DEBUG = 3,
+    TRACE = 4
+}
 
-    addListener<K extends keyof T>(event: K, listener: (arg: T[K]) => void): void {
-        if (!this.listeners[event]) {
-            this.listeners[event] = [];
+export class Logger {
+    private static level: LogLevel = LogLevel.INFO;
+    private static enabled: boolean = true;
+    private static instances: Map<string, Logger> = new Map();
+
+    static setLevel(level: LogLevel) {
+        Logger.level = level;
+    }
+
+    static setEnabled(enabled: boolean) {
+        Logger.enabled = enabled;
+    }
+
+    // Factory method to get or create logger instance
+    static getLogger(context: string): Logger {
+        if (!this.instances.has(context)) {
+            this.instances.set(context, new Logger(context));
         }
-        this.listeners[event]!.push(listener);
+        return this.instances.get(context)!;
     }
 
-    removeListener<K extends keyof T>(event: K, listener: (arg: T[K]) => void): void {
-        if (!this.listeners[event]) return;
-        this.listeners[event] = this.listeners[event]!.filter(l => l !== listener);
+    private constructor(private context: string) {}
+
+    error(message: string, ...args: any[]) {
+        if (!Logger.enabled) return;
+        if (Logger.level >= LogLevel.ERROR) {
+            console.error(`[Porter:${this.context}] ${message}`, ...args);
+        }
     }
 
-    emit<K extends keyof T>(event: K, arg: T[K]): void {
-        if (!this.listeners[event]) return;
-        this.listeners[event]!.forEach(listener => listener(arg));
+    warn(message: string, ...args: any[]) {
+        if (!Logger.enabled) return;
+        if (Logger.level >= LogLevel.WARN) {
+            console.warn(`[Porter:${this.context}] ${message}`, ...args);
+        }
+    }
+
+    info(message: string, ...args: any[]) {
+        if (!Logger.enabled) return;
+        if (Logger.level >= LogLevel.INFO) {
+            console.log(`[Porter:${this.context}] ${message}`, ...args);
+        }
+    }
+
+    debug(message: string, ...args: any[]) {
+        if (!Logger.enabled) return;
+        if (Logger.level >= LogLevel.DEBUG) {
+            console.log(`[Porter:${this.context}] ${message}`, ...args);
+        }
+    }
+
+    trace(message: string, ...args: any[]) {
+        if (!Logger.enabled) return;
+        if (Logger.level >= LogLevel.TRACE) {
+            console.log(`[Porter:${this.context}] ${message}`, ...args);
+        }
     }
 }
 
 export { isValidPort, isValidSender, isServiceWorker };
+
+e

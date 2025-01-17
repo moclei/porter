@@ -1,14 +1,22 @@
 import browser, { Runtime } from 'webextension-polyfill';
-import { Agent, AgentMetadata, Message, MessageConfig, PorterContext, TargetAgent } from './porter.model';
+import { Agent, AgentMetadata, Message, MessageConfig, PorterContext, PorterError, PorterErrorType, TargetAgent } from './porter.model';
 
 export class PorterAgent {
     private static instance: PorterAgent | null = null;
+    private readonly CONNECTION_TIMEOUT = 10000; // 10 seconds
+    private readonly MAX_RETRIES = 3;
+    private readonly RETRY_DELAY = 2000; // 2 seconds
+    private connectionAttempts = 0;
+    private connectionTimer: NodeJS.Timeout | null = null;
+    private messageQueue: Array<{message: Message<any>, timestamp: number}> = [];
     private agent: Agent | undefined = undefined;
     private config: MessageConfig | null = null;
     private context: PorterContext | null = null;
     private namespace: string = 'porter';
     private metadata: AgentMetadata | null = null;
     private connections: AgentMetadata[] = [];
+    private readonly MAX_QUEUE_SIZE = 1000;
+    private readonly MESSAGE_TIMEOUT = 30000;
     private internalHandlers: MessageConfig = {
         'porter-error': (message: Message<any>) => {
             this.error('internalHandlers, error message received: ', message);
@@ -22,7 +30,6 @@ export class PorterAgent {
         },
     }
 
-
     private constructor(options: { agentContext?: PorterContext, namespace?: string } = {}) {
         this.namespace = options.namespace ?? this.namespace;
         this.context = options.agentContext ?? this.determineContext();
@@ -30,56 +37,24 @@ export class PorterAgent {
         this.initializeConnection();
     }
 
-    public static getInstance(options: { agentContext?: PorterContext, namespace?: string } = {}): PorterAgent {
-        if (!PorterAgent.instance || PorterAgent.instance.namespace !== options.namespace) {
-            PorterAgent.instance = new PorterAgent(options);
-        }
-        return PorterAgent.instance;
-    }
-
-    private initializeConnection() {
-        const name = `${this.namespace}-${this.context}`;
-        this.log('Connecting new port with name: ', name);
-        const port = browser.runtime.connect({ name });
-        this.agent = { port, data: {} };
-        port.onMessage.addListener((message: any) => this.handleMessage(port, message));
-        port.onDisconnect.addListener(() => this.handleDisconnect(port));
-    }
-
-    public onMessage(config: MessageConfig) {
-        this.log('Setting message handler config: ', config);
-        this.config = config;
-        this.agent?.port?.postMessage({ action: 'porter-messages-established' });
-    }
-
-    public post(message: Message<any>, target?: TargetAgent) {
-        if (!this.agent) {
-            this.warn('No agent available to post message');
-            return;
-        }
-        if (!this.agent.port) {
-            this.warn('No port available to post message');
-            return;
-        }
-        if (target) {
-            message.target = target;
-        }
-        this.agent.port.postMessage(message);
-    }
-
-    public getPort(): Runtime.Port | undefined {
-        return this.agent?.port;
-    }
-
     private handleMessage(port: Runtime.Port, message: any) {
         this.log('handleMessage, message: ', message);
-
         if (!this.config) {
-            this.warn('No message handler configured, config: ', this.config);
+            if (this.messageQueue.length >= this.MAX_QUEUE_SIZE) {
+                this.warn('Message queue full, dropping message:', message);
+                return;
+            }
+            this.warn('No message handler configured yet, queueing message: ', message);
+            this.messageQueue.push({message, timestamp: Date.now()});
             return;
         }
+        this.processMessage(port, message);
+    }
+    
+    private processMessage(port: Runtime.Port, message: any) {
         const action = message.action;
         let handler;
+        
         if (message.action.startsWith('porter')) {
             handler = this.internalHandlers[action];
             if (handler) {
@@ -89,14 +64,145 @@ export class PorterAgent {
             }
             return;
         }
-        handler = this.config[action];
-
+        
+        handler = this.config?.[action];
         if (handler) {
             this.log('Found handler, calling with message');
             handler(message);
         } else {
             this.log(` No handler for message with action: ${action}`);
         }
+    }
+
+
+    public static getInstance(options: { agentContext?: PorterContext, namespace?: string } = {}): PorterAgent {
+        if (!PorterAgent.instance || PorterAgent.instance.namespace !== options.namespace) {
+            PorterAgent.instance = new PorterAgent(options);
+        }
+        return PorterAgent.instance;
+    }
+
+    private async initializeConnection(): Promise<void> {
+        try {
+            if (this.connectionTimer) {
+                clearTimeout(this.connectionTimer);
+            }
+
+            this.connectionTimer = setTimeout(() => {
+                this.handleConnectionTimeout();
+            }, this.CONNECTION_TIMEOUT);
+
+            const name = `${this.namespace}-${this.context}`;
+            this.log('Connecting new port with name: ', name);
+            const port = browser.runtime.connect({ name });
+            
+            // Set up connection promise
+            const connectionPromise = new Promise<void>((resolve, reject) => {
+                const handleInitialMessage = (message: any) => {
+                    if (message.action === 'porter-handshake') {
+                        clearTimeout(this.connectionTimer!);
+                        port.onMessage.removeListener(handleInitialMessage);
+                        resolve();
+                    }
+                };
+                
+                port.onMessage.addListener(handleInitialMessage);
+            });
+
+            this.agent = { port, data: {} };
+            port.onMessage.addListener((message: any) => this.handleMessage(port, message));
+            port.onDisconnect.addListener((p) => this.handleDisconnect(p));
+
+            // Wait for handshake or timeout
+            await Promise.race([
+                connectionPromise,
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new PorterError(
+                        PorterErrorType.CONNECTION_TIMEOUT,
+                        'Connection timed out waiting for handshake'
+                    )), this.CONNECTION_TIMEOUT)
+                )
+            ]);
+
+            this.connectionAttempts = 0; // Reset on successful connection
+        } catch (error) {
+            this.error('Connection failed:', error);
+            await this.handleConnectionFailure(error);
+        }
+    }
+    private async handleConnectionFailure(error: unknown): Promise<void> {
+        this.connectionAttempts++;
+        
+        if (this.connectionAttempts < this.MAX_RETRIES) {
+            this.warn(`Connection attempt ${this.connectionAttempts} failed, retrying in ${this.RETRY_DELAY}ms...`);
+            await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
+            await this.initializeConnection();
+        } else {
+            const finalError = new PorterError(
+                PorterErrorType.CONNECTION_FAILED,
+                'Failed to establish connection after maximum retries',
+                { attempts: this.connectionAttempts, originalError: error }
+            );
+            this.error('Max connection attempts reached:', finalError);
+            throw finalError;
+        }
+    }
+
+    private handleConnectionTimeout() {
+        this.error('Connection timed out');
+        this.handleDisconnect(this.agent?.port!);
+    }
+
+    public onMessage(config: MessageConfig) {
+        this.log('Setting message handler config: ', config);
+        this.config = config;
+
+        while (this.messageQueue.length > 0) {
+            const item = this.messageQueue[0];
+            if (Date.now() - item.timestamp > this.MESSAGE_TIMEOUT) {
+                this.warn('Message timeout, dropping message: ', this.messageQueue.shift());
+                continue;
+            }
+            this.processMessage(this.agent?.port!, item.message);
+            this.messageQueue.shift();
+        }
+        this.agent?.port?.postMessage({ action: 'porter-messages-established' });
+    }
+
+    public post(message: Message<any>, target?: TargetAgent) {
+        this.log(`Sending message`, {
+            action: message.action,
+            target,
+            hasPayload: !!message.payload
+        });
+        if (!this.agent) {
+            throw new PorterError(
+                PorterErrorType.CONNECTION_FAILED,
+                'No agent available to post message'
+            );
+        }
+        if (!this.agent.port) {
+            throw new PorterError(
+                PorterErrorType.CONNECTION_FAILED,
+                'No port available to post message'
+            );
+        }
+        try {
+            if (target) {
+                message.target = target;
+            }
+            this.agent.port.postMessage(message);
+        } catch (error) {
+            throw new PorterError(
+                PorterErrorType.MESSAGE_FAILED,
+                'Failed to post message',
+                { originalError: error, message, target }
+            );
+        }
+    }
+
+    public getPort(): Runtime.Port | undefined {
+        return this.agent?.port;
     }
 
     private handleHandshake(message: Message<any>) {
@@ -148,7 +254,7 @@ export class PorterAgent {
     }
 
     private log(message: string, ...args: any[]) {
-        console.log(`PorterAgent [${this.namespace}-${this.metadata?.key || ''}], ` + message, ...args);
+        console.log(`[Porter:${this.context}] ${message}`, ...args);
     }
     private error(message: string, ...args: any[]) {
         console.error(`PorterAgent [${this.namespace}-${this.metadata?.key || ''}], ` + message, ...args);

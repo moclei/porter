@@ -23,14 +23,13 @@ export type TargetAgent = {
     location?: AgentLocation;
 };
 
-export type PostTarget =
-    | number  // tabId
-    | string  // key
-    | {
-        context: PorterContext;
-        index?: number;
+export type PostTarget = {
+    context: PorterContext;
+    location?: {
+        index: number;
         subIndex?: number;
-    };
+    }
+}
 
 export type GetAgentOptions = {
     context?: PorterContext;
@@ -68,6 +67,25 @@ export enum PorterContext {
     Background = 'background',
     Unknown = 'unknown',
     React = 'react',
+}
+
+export enum PorterErrorType {
+    CONNECTION_FAILED = 'CONNECTION_FAILED',
+    CONNECTION_TIMEOUT = 'CONNECTION_TIMEOUT',
+    INVALID_TARGET = 'INVALID_TARGET',
+    MESSAGE_FAILED = 'MESSAGE_FAILED',
+    INVALID_CONTEXT = 'INVALID_CONTEXT',
+}
+
+export class PorterError extends Error {
+    constructor(
+        public type: PorterErrorType,
+        message: string,
+        public details?: any
+    ) {
+        super(message);
+        this.name = 'PorterError';
+    }
 }
 
 export type Message<K extends keyof MessageAction> = {

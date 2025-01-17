@@ -1,10 +1,11 @@
 {
     "compilerOptions": {
-        "target": "ES2018",
+        "target": "ES2021",
         "module": "ESNext",
         "lib": [
-            "ES2018",
-            "DOM"
+            "ES2021",
+            "DOM",
+            "webworker"
         ],
         "outDir": "./dist",
         "rootDir": "./src",

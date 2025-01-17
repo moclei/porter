@@ -13,7 +13,11 @@
     "build": "npm run build:ts && npm run build:js",
     "build:ts": "tsc --emitDeclarationOnly --outDir dist",
     "build:js": "node esbuild.config.js",
+    "build:watch": "concurrently \"npm run build:ts -- --watch\" \"node esbuild.config.js --watch\"",
     "test": "jest --config jest.config.js",
+    "test:extension": "web-ext run --source-dir ./tests/extension",
+    "link:extension": "npm link && cd tests/extension && npm link porter-source",
+    "dev": "concurrently \"npm run build:watch\" \"npm run test:extension\"",
     "prepublishOnly": "npm run build"
   },
   "exports": {
