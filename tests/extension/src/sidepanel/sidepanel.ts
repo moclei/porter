@@ -9,17 +9,17 @@ onMessage({
   },
   'broadcast-message': (message) => {
     console.log('Received broadcast:', message.payload);
-  }
+  },
 });
 
 // Run tests automatically
 function runTests() {
   // Test basic messaging
   post({ action: 'test-echo', payload: 'Hello!' });
-  
+
   // Test broadcasting
   post({ action: 'test-broadcast', payload: 'Broadcast test' });
-  
+
   // Test error handling
   try {
     post({ action: 'non-existent' });
@@ -28,4 +28,22 @@ function runTests() {
   }
 }
 
-setTimeout(runTests, 1000); // Give time for connection to establish
+document.addEventListener('DOMContentLoaded', () => {
+  const testButton = document.querySelector('#run-tests');
+  if (testButton) {
+    testButton.addEventListener('click', runTests);
+  }
+
+  const popupButton = document.querySelector('#open-popup');
+  if (popupButton) {
+    popupButton.addEventListener('click', async () => {
+      const [tab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (tab?.id) {
+        await chrome.action.openPopup();
+      }
+    });
+  }
+});
