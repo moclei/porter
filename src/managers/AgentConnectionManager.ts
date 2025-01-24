@@ -1,6 +1,7 @@
 import browser, { Runtime } from 'webextension-polyfill';
 import {
   Agent,
+  AgentMetadata,
   PorterContext,
   PorterError,
   PorterErrorType,
@@ -15,6 +16,7 @@ export class AgentConnectionManager {
   private connectionTimer: NodeJS.Timeout | null = null;
   private agent: Agent | undefined;
   private readonly logger: Logger;
+  private metadata: AgentMetadata | undefined;
 
   constructor(
     private readonly namespace: string,
@@ -41,8 +43,10 @@ export class AgentConnectionManager {
       const connectionPromise = new Promise<void>((resolve, reject) => {
         const handleInitialMessage = (message: any) => {
           if (message.action === 'porter-handshake') {
+            this.logger.debug('Received handshake:', message);
             clearTimeout(this.connectionTimer!);
             port.onMessage.removeListener(handleInitialMessage);
+            this.metadata = message.payload.meta;
             resolve();
           }
         };
@@ -76,6 +80,10 @@ export class AgentConnectionManager {
 
   public getPort(): Runtime.Port | undefined {
     return this.agent?.port;
+  }
+
+  public getMetadata(): AgentMetadata | undefined {
+    return this.metadata;
   }
 
   private async handleConnectionFailure(error: unknown): Promise<void> {
