@@ -3,6 +3,8 @@ import {
   MessageConfig,
   PorterContext,
   TargetAgent,
+  AgentMetadata,
+  ConnectContext,
 } from '../porter.model';
 import { AgentConnectionManager } from '../managers/AgentConnectionManager';
 import { AgentMessageHandler } from '../managers/AgentMessageHandler';
@@ -77,6 +79,27 @@ export class PorterAgent {
     }
     return PorterContext.Extension;
   }
+
+  public getAgentMetadata(): AgentMetadata | null {
+    const port = this.connectionManager.getPort();
+    if (!port?.sender) return null;
+
+    const context = this.determineContext();
+    const tabId = port.sender.tab?.id;
+    const frameId = port.sender.frameId;
+
+    if (tabId === undefined || frameId === undefined) return null;
+
+    return {
+      key: `${context}:${tabId}:${frameId}`,
+      connectionType: ConnectContext.NewAgent,
+      context: context,
+      location: {
+        index: tabId,
+        subIndex: frameId,
+      },
+    };
+  }
 }
 
 export function connect(options?: {
@@ -85,10 +108,12 @@ export function connect(options?: {
 }): [
   (message: Message<any>, target?: TargetAgent) => void,
   (config: MessageConfig) => void,
+  () => AgentMetadata | null,
 ] {
   const porterInstance = PorterAgent.getInstance(options);
   return [
     porterInstance.post.bind(porterInstance),
     porterInstance.onMessage.bind(porterInstance),
+    porterInstance.getAgentMetadata.bind(porterInstance),
   ];
 }
