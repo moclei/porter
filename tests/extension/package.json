@@ -1,20 +1,18 @@
 {
-    "name": "porter-test-extension",
-    "private": true,
-    "version": "1.0.0",
-    "type": "module",
-    "scripts": {
+  "name": "porter-test-extension",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
     "build": "node ./build.mjs",
-      "watch": "tsc --watch"
-    },
-    "dependencies": {
-      "porter-source": "file:../..",
-      "webextension-polyfill": "^0.12.0"
-    },
-    "devDependencies": {
-      "typescript": "^5.5.4",
-      "@types/webextension-polyfill": "^0.10.7",
-      "@types/node": "^20.12.12",
-        "chokidar": "^3.5.3"
-    }
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "porter-source": "file:../..",
+    "webextension-polyfill": "^0.12.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/webextension-polyfill": "^0.12.1"
   }
+}
