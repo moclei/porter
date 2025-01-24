@@ -81,24 +81,7 @@ export class PorterAgent {
   }
 
   public getAgentMetadata(): AgentMetadata | null {
-    const port = this.connectionManager.getPort();
-    if (!port?.sender) return null;
-
-    const context = this.determineContext();
-    const tabId = port.sender.tab?.id;
-    const frameId = port.sender.frameId;
-
-    if (tabId === undefined || frameId === undefined) return null;
-
-    return {
-      key: `${context}:${tabId}:${frameId}`,
-      connectionType: ConnectContext.NewAgent,
-      context: context,
-      location: {
-        index: tabId,
-        subIndex: frameId,
-      },
-    };
+    return this.connectionManager.getMetadata() || null;
   }
 }
 
