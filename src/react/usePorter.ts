@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   AgentMetadata,
   connect,
@@ -33,12 +33,20 @@ export function usePorter(options?: {
   );
   const getMetadataRef = useRef<(() => AgentMetadata | null) | null>(null);
 
+  const memoizedOptions = useMemo(
+    () => ({
+      agentContext: options?.agentContext,
+      namespace: options?.namespace,
+    }),
+    [options?.agentContext, options?.namespace]
+  );
+
   useEffect(() => {
     let isMounted = true;
 
     const initializePorter = async () => {
       try {
-        const [post, setMessage, getMetadata] = await connect(options);
+        const [post, setMessage, getMetadata] = await connect(memoizedOptions);
 
         if (isMounted) {
           postRef.current = post;
@@ -47,6 +55,7 @@ export function usePorter(options?: {
           setIsConnected(true);
           setError(null);
           setMetadata(getMetadata());
+          console.log('[PORTER] metadata', getMetadata());
         }
       } catch (err) {
         if (isMounted) {
