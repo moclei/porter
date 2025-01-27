@@ -54,11 +54,23 @@ export function usePorter(options?: {
           getMetadataRef.current = getMetadata;
           setIsConnected(true);
           setError(null);
-          setMetadata(getMetadata());
-          console.log('[PORTER] metadata', getMetadata());
+
+          // Set up internal porter-handshake handler
+          setMessage({
+            'porter-handshake': (message: Message<any>) => {
+              console.log(
+                '[PORTER] porter-handshake heard: ',
+                message.payload.meta
+              );
+              if (isMounted) {
+                setMetadata(message.payload.meta);
+              }
+            },
+          });
         }
       } catch (err) {
         if (isMounted) {
+          console.log('[PORTER] initializePorter error ', err);
           setError(
             err instanceof Error
               ? err
@@ -76,7 +88,7 @@ export function usePorter(options?: {
       // Clean up the connection if necessary
       // This depends on whether porter-source provides a cleanup method
     };
-  }, [options?.agentContext, options?.namespace]);
+  }, [memoizedOptions]);
 
   const post = useCallback((message: Message<any>) => {
     if (postRef.current) {
