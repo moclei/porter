@@ -78,7 +78,6 @@ export class MessageHandler {
   private broadcastMessage(message: Message<any>): void {
     this.logger.info('Broadcasting message to all agents: ', message);
     this.agentOperations.getAllAgents().forEach((agent) => {
-      this.logger.info('First agent: ', agent);
       if (agent.port) {
         agent.port.postMessage(message);
       }
@@ -123,6 +122,17 @@ export class MessageHandler {
   }
 
   public onMessage(config: MessageConfig) {
+    // Optionally: Check for existing listeners with same config
+    const existingListener = Array.from(this.messageListeners).find(
+      (listener) => JSON.stringify(listener.config) === JSON.stringify(config)
+    );
+
+    if (existingListener) {
+      this.logger.warn(
+        `Listener with same config already exists: ${JSON.stringify(config)}`
+      );
+    }
+
     const messageListener: MessageListener = {
       config,
       listener: (event: PorterEvent['onMessage']) => {
@@ -220,21 +230,26 @@ export class MessageHandler {
       }
     }
 
+    let handlerCount = 0;
     let handled = false;
     this.logger.trace('Processing message with registered handlers');
     for (const { listener, config } of this.messageListeners) {
       if (config[messageEvent.message.action]) {
         listener(messageEvent as PorterEvent['onMessage']);
-        handled = true;
+        handlerCount++;
         this.logger.debug('Message handled by registered listener');
         break;
       }
     }
 
-    if (!handled) {
+    if (handlerCount === 0) {
       this.logger.warn(
         'No handler found for message:',
         messageEvent.message.action
+      );
+    } else {
+      this.logger.debug(
+        `Message handled by ${handlerCount} registered listeners`
       );
     }
   }
