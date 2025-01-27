@@ -4,7 +4,6 @@ import {
   PorterContext,
   TargetAgent,
   AgentMetadata,
-  ConnectContext,
 } from '../porter.model';
 import { AgentConnectionManager } from '../managers/AgentConnectionManager';
 import { AgentMessageHandler } from '../managers/AgentMessageHandler';
