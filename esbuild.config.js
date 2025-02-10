@@ -8,6 +8,11 @@ const shared = {
   sourcemap: true,
   plugins: [nodeExternalsPlugin()],
   external: ['react'],
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(
+      process.env.NODE_ENV || 'development'
+    ),
+  },
 };
 
 Promise.all([

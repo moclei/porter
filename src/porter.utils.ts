@@ -7,9 +7,7 @@ function isServiceWorker() {
   );
 }
 
-function isValidPort(
-  port: Runtime.Port
-): port is Runtime.Port & {
+function isValidPort(port: Runtime.Port): port is Runtime.Port & {
   sender: Runtime.MessageSender & { tab: { id: number }; frameId: number };
 } {
   return !!port && !!port.sender && isValidSender(port.sender);
@@ -35,9 +33,16 @@ export enum LogLevel {
 }
 
 export class Logger {
-  private static level: LogLevel = LogLevel.TRACE;
+  private static level: LogLevel = Logger.getLevel();
   private static enabled: boolean = true;
   private static instances: Map<string, Logger> = new Map();
+
+  private static getLevel(): LogLevel {
+    const isProd =
+      process.env.NODE_ENV === 'production' ||
+      process.env.PORTER_ENV === 'production';
+    return isProd ? LogLevel.WARN : LogLevel.TRACE;
+  }
 
   static setLevel(level: LogLevel) {
     Logger.level = level;
@@ -74,21 +79,21 @@ export class Logger {
   info(message: string, ...args: any[]) {
     if (!Logger.enabled) return;
     if (Logger.level >= LogLevel.INFO) {
-      console.log(`[Porter:${this.context}] ${message}`, ...args);
+      console.info(`[Porter:${this.context}] ${message}`, ...args);
     }
   }
 
   debug(message: string, ...args: any[]) {
     if (!Logger.enabled) return;
     if (Logger.level >= LogLevel.DEBUG) {
-      console.log(`[Porter:${this.context}] ${message}`, ...args);
+      console.debug(`[Porter:${this.context}] ${message}`, ...args);
     }
   }
 
   trace(message: string, ...args: any[]) {
     if (!Logger.enabled) return;
     if (Logger.level >= LogLevel.TRACE) {
-      console.log(`[Porter:${this.context}] ${message}`, ...args);
+      console.trace(`[Porter:${this.context}] ${message}`, ...args);
     }
   }
 }
