@@ -237,8 +237,10 @@ export class MessageHandler {
       if (config[messageEvent.message.action]) {
         listener(messageEvent as PorterEvent['onMessage']);
         handlerCount++;
-        this.logger.debug('Message handled by registered listener');
-        break;
+        this.logger.debug('Message handled by registered listener: ', {
+          listener,
+          config,
+        });
       }
     }
 
