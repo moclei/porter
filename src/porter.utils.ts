@@ -48,8 +48,9 @@ export class Logger {
       return Logger.globalOptions.level;
     }
     const isProd =
-      process?.env?.NODE_ENV === 'production' ||
-      process?.env?.PORTER_ENV === 'production';
+      typeof process !== 'undefined' &&
+      (process.env?.NODE_ENV === 'production' ||
+        process.env?.PORTER_ENV === 'production');
     return isProd ? LogLevel.WARN : LogLevel.TRACE;
   }
   // Add a configure method to set global options
