@@ -32,24 +32,35 @@ export enum LogLevel {
   TRACE = 4,
 }
 
+export interface LoggerOptions {
+  level?: LogLevel;
+  enabled?: boolean;
+}
+
 export class Logger {
   private static level: LogLevel = Logger.getLevel();
   private static enabled: boolean = true;
   private static instances: Map<string, Logger> = new Map();
+  private static globalOptions?: LoggerOptions;
 
   private static getLevel(): LogLevel {
+    if (Logger.globalOptions?.level !== undefined) {
+      return Logger.globalOptions.level;
+    }
     const isProd =
       process.env.NODE_ENV === 'production' ||
       process.env.PORTER_ENV === 'production';
     return isProd ? LogLevel.WARN : LogLevel.TRACE;
   }
-
-  static setLevel(level: LogLevel) {
-    Logger.level = level;
-  }
-
-  static setEnabled(enabled: boolean) {
-    Logger.enabled = enabled;
+  // Add a configure method to set global options
+  static configure(options: LoggerOptions) {
+    Logger.globalOptions = options;
+    if (options.level !== undefined) {
+      Logger.level = options.level;
+    }
+    if (options.enabled !== undefined) {
+      Logger.enabled = options.enabled;
+    }
   }
 
   // Factory method to get or create logger instance
