@@ -1,6 +1,5 @@
 import { Runtime } from 'webextension-polyfill';
 import {
-  AgentInfo,
   BrowserLocation,
   Message,
   MessageConfig,
