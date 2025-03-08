@@ -1,15 +1,18 @@
+import { Runtime } from 'webextension-polyfill';
 import { AgentOperations } from './AgentManager';
 import {
   PorterEvent,
   Listener,
   MessageListener,
   Message,
-  PostTarget,
   PorterErrorType,
   MessageConfig,
   PorterContext,
   PorterError,
-  AgentMetadata,
+  AgentInfo,
+  MessageTarget,
+  BrowserLocation,
+  AgentId,
 } from '../porter.model';
 import { Logger } from '../porter.utils';
 
@@ -26,21 +29,30 @@ export class MessageHandler {
     private logger: Logger
   ) {
     this.initializationHandler = {
-      'porter-messages-established': (message: Message<any>, agent) => {
-        if (!agent || !agent.key) return;
-        const agentMetadata = this.agentOperations.getAgentMetadata(agent.key);
-        if (!agentMetadata) return;
+      'porter-messages-established': (
+        message: Message<any>,
+        agent?: AgentInfo
+      ) => {
+        if (!agent || !agent.id) return;
+        const agentInfo = this.agentOperations.getAgentById(agent.id)?.info;
+        if (!agentInfo) {
+          this.logger.error('No agent info found for agent id: ', agent.id);
+          return;
+        }
         this.logger.debug(
           'internalHandlers, established message received: ',
-          agent!.key,
+          agent.id,
           message
         );
-        this.emitEvent('onMessagesSet', agentMetadata);
+        this.emitEvent('onMessagesSet', agentInfo);
       },
     };
   }
 
-  public async post(message: Message<any>, target?: PostTarget): Promise<void> {
+  public async post(
+    message: Message<any>,
+    target?: MessageTarget
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         this.logger.debug('Post request received:', {
@@ -56,12 +68,15 @@ export class MessageHandler {
 
         if (target === undefined) {
           this.broadcastMessage(message);
-        } else if (typeof target === 'number') {
-          this.postToTab(message, target);
+          // how to tell if target is BrowserLocation type?
+        } else if (isBrowserLocation(target)) {
+          this.postToLocation(message, target);
+        } else if (isPorterContext(target)) {
+          this.postToContext(message, target);
         } else if (typeof target === 'string') {
-          this.postToKey(message, target);
+          this.postToId(message, target);
         } else {
-          this.postWithOptions(message, target);
+          this.postToTab(message, target);
         }
 
         clearTimeout(timeoutId);
@@ -84,41 +99,85 @@ export class MessageHandler {
     });
   }
 
+  // Post to all frames in a tab
   private postToTab(message: Message<any>, tabId: number): void {
-    const key = `${PorterContext.ContentScript}:${tabId}:0`;
-    this.postToKey(message, key);
-  }
-
-  // Requires a specified context. Since the other overloads from the public post method
-  // assume a content-script context, this method can be inferred to be non-content-script.
-  private postWithOptions(message: Message<any>, options: PostTarget): void {
-    this.logger.debug('Posting with options: ', options);
-    let key = this.agentOperations.getKey(
-      options.context,
-      options.location?.index || 0,
-      options.location?.subIndex || 0
-    );
-    this.postToKey(message, key);
-  }
-
-  private postToKey(message: Message<any>, key: string): void {
-    const agent = this.agentOperations.getAgentByKey(key);
-    if (!agent?.port) {
+    // const key = `${PorterContext.ContentScript}:${tabId}:0`;
+    const agents = this.agentOperations.queryAgents({
+      context: PorterContext.ContentScript,
+      tabId,
+    });
+    if (agents.length === 0) {
+      this.logger.warn('post: No agents found for tab: ', tabId);
       throw new PorterError(
-        PorterErrorType.INVALID_TARGET,
-        `No agent found for key: ${key}`
+        PorterErrorType.MESSAGE_FAILED,
+        `Failed to post message to tabId ${tabId}`,
+        { originalError: message }
       );
+      return;
     }
+    agents.forEach((agent) => {
+      if (agent.port) {
+        this.postToPort(message, agent.port);
+      }
+    });
+  }
 
+  private postToLocation(
+    message: Message<any>,
+    location: BrowserLocation
+  ): void {
+    const agents = this.agentOperations.queryAgents(location);
+    agents.forEach((agent) => {
+      if (!agent.port) {
+        throw new PorterError(
+          PorterErrorType.INVALID_TARGET,
+          `No port found for agent`,
+          { agentInfo: agent.info }
+        );
+        return;
+      }
+      this.postToPort(message, agent.port);
+    });
+  }
+
+  private postToContext(message: Message<any>, context: PorterContext): void {
+    const agents = this.agentOperations.queryAgents({
+      context,
+    });
+    agents.forEach((agent) => {
+      if (!agent.port) {
+        throw new PorterError(
+          PorterErrorType.INVALID_TARGET,
+          `No port found for agent`,
+          { agentInfo: agent.info }
+        );
+        return;
+      }
+      this.postToPort(message, agent.port);
+    });
+  }
+
+  private postToPort(message: Message<any>, port: Runtime.Port): void {
     try {
-      agent.port.postMessage(message);
+      port.postMessage(message);
     } catch (error) {
       throw new PorterError(
         PorterErrorType.MESSAGE_FAILED,
-        `Failed to post message to agent ${key}`,
+        `Failed to post message to port`,
         { originalError: error, message }
       );
     }
+  }
+
+  private postToId(message: Message<any>, agentId: AgentId): void {
+    const agent = this.agentOperations.getAgentById(agentId);
+    if (!agent?.port) {
+      throw new PorterError(
+        PorterErrorType.INVALID_TARGET,
+        `No agent found for key: ${agentId}`
+      );
+    }
+    this.postToPort(message, agent.port);
   }
 
   public onMessage(config: MessageConfig) {
@@ -138,22 +197,11 @@ export class MessageHandler {
       listener: (event: PorterEvent['onMessage']) => {
         const handler = config[event.message.action];
         if (handler) {
-          this.logger.debug(
-            'onMessage, calling handler. Message: ',
-            event.key,
-            event.message
-          );
-          handler(event.message, {
-            key: event.key,
-            context: event.context,
-            location: event.location,
-          });
+          this.logger.debug('onMessage, calling handler ', { event });
+          const { message, ...info } = event;
+          handler(message, info);
         } else {
-          this.logger.debug(
-            'onMessage, no handler found. Message: ',
-            event.key,
-            event.message
-          );
+          this.logger.debug('onMessage, no handler found ', { event });
         }
       },
     };
@@ -165,18 +213,13 @@ export class MessageHandler {
   }
 
   // Handles messages incomng from ports
-  public handleIncomingMessage(message: any, agentMetadata: AgentMetadata) {
-    this.logger.debug(
-      `Received message from ${agentMetadata.context}:`,
-      agentMetadata.key,
-      {
-        action: message.action,
-        target: message.target,
-        hasPayload: !!message.payload,
-      }
-    );
+  public handleIncomingMessage(message: any, info: AgentInfo) {
+    this.logger.debug(`Received message`, {
+      message,
+      info,
+    });
 
-    this.emitMessage({ ...agentMetadata, message });
+    this.emitMessage({ ...info, message });
   }
 
   private emitEvent<T extends keyof PorterEvent>(
@@ -192,46 +235,33 @@ export class MessageHandler {
   // Dispatches incoming messages, either to a registered listener on the source, or to a specific agent
   // if a target was specified (calling this a relay)
   private emitMessage(messageEvent: PorterEvent['onMessage']) {
-    this.logger.debug(
-      'Message received:',
-      messageEvent.key,
-      messageEvent.message
-    );
+    this.logger.debug('Dispatching incoming message to subscribers', {
+      messageEvent,
+    });
 
     if (messageEvent.message.action.startsWith('porter-')) {
       const handler = this.initializationHandler[messageEvent.message.action];
       if (handler) {
-        this.logger.debug(
-          'Processing internal porter message:',
-          messageEvent.message.action
-        );
-        handler(messageEvent.message, {
-          key: messageEvent.key,
-          context: messageEvent.context,
-          location: messageEvent.location,
+        this.logger.debug('Internal message being handled', {
+          messageEvent,
         });
+        const { message, ...info } = messageEvent;
+        handler(message, info);
         return;
       }
     }
 
+    // Handle relaying to a target
     if (!!messageEvent.message.target) {
       this.logger.debug(
         'Relaying message to target:',
         messageEvent.message.target
       );
-      const { context, location } = messageEvent.message.target;
-      if (location) {
-        this.post(messageEvent.message, {
-          context: context as PorterContext,
-          location,
-        });
-      } else {
-        this.post(messageEvent.message, { context: context as PorterContext });
-      }
+      this.post(messageEvent.message, messageEvent.message.target);
     }
 
     let handlerCount = 0;
-    let handled = false;
+
     this.logger.trace('Processing message with registered handlers');
     for (const { listener, config } of this.messageListeners) {
       if (config[messageEvent.message.action]) {
@@ -274,19 +304,20 @@ export class MessageHandler {
     };
   }
 
-  public handleDisconnect(agentMetadata: AgentMetadata) {
-    this.logger.info('Agent disconnected:', agentMetadata.key);
-    this.emitEvent('onDisconnect', agentMetadata);
-    for (const messageListener of this.messageListeners) {
-      if (messageListener.config[agentMetadata.key]) {
+  public handleDisconnect(info: AgentInfo) {
+    // Remove all message listeners for this agent
+    this.messageListeners.forEach((messageListener) => {
+      if (messageListener.config[info.id]) {
         this.messageListeners.delete(messageListener);
       }
-    }
+    });
+    this.logger.info('Agent disconnected:', { info });
+    this.emitEvent('onDisconnect', info);
   }
 
-  public handleConnect(agentMetadata: AgentMetadata) {
-    this.logger.info('Agent connected:', agentMetadata.key);
-    this.emitEvent('onConnect', agentMetadata);
+  public handleConnect(info: AgentInfo) {
+    this.logger.info('Agent connected:', { info });
+    this.emitEvent('onConnect', info);
   }
 
   public onConnect(listener: Listener<'onConnect'>) {
@@ -300,4 +331,22 @@ export class MessageHandler {
   public onDisconnect(listener: Listener<'onDisconnect'>) {
     return this.addListener('onDisconnect', listener);
   }
+}
+
+// Type guard for BrowserLocation
+function isBrowserLocation(target: MessageTarget): target is BrowserLocation {
+  return (
+    typeof target === 'object' &&
+    target !== null &&
+    'context' in target &&
+    'tabId' in target &&
+    'frameId' in target
+  );
+}
+
+function isPorterContext(target: MessageTarget): target is PorterContext {
+  return (
+    typeof target === 'string' &&
+    Object.values(PorterContext).includes(target as PorterContext)
+  );
 }

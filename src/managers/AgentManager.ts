@@ -1,53 +1,240 @@
-import { Runtime } from 'webextension-polyfill';
+import browser, { Runtime } from 'webextension-polyfill';
+import { v4 as uuidv4 } from 'uuid';
 import {
   Agent,
-  AgentMetadata,
-  ConnectContext,
+  AgentInfo,
+  ConnectionType,
   PorterContext,
-  PostTarget,
+  MessageTarget,
+  AgentId,
+  BrowserLocation,
 } from '../porter.model';
 import { Logger } from '../porter.utils';
 
 export interface AgentOperations {
-  getAgent(options: {
-    index?: number;
-    subIndex?: number;
-    context: PorterContext;
-  }): Agent | Agent[] | null;
-  addAgent(port: Runtime.Port, context: PorterContext): void;
-  getKey(context: PorterContext, index: number, subIndex?: number): string;
-  getAgentByKey(key: string): Agent | null;
+  addAgent(port: Runtime.Port, context?: PorterContext): AgentId | undefined;
+  queryAgents(location: Partial<BrowserLocation>): Agent[];
+  getAgentById(id: AgentId): Agent | null;
+  getAgentsByContext(context: PorterContext): Agent[];
+  getAgentByLocation(location: BrowserLocation): Agent | null;
   getAllAgents(): Agent[];
-  getAgentMetadata(key: string): AgentMetadata | null;
-  getAllAgentsMetadata(): AgentMetadata[];
+  getAllAgentsInfo(): AgentInfo[];
+  hasPort(port: Runtime.Port): boolean;
+  removeAgent(agentId: AgentId): void;
   printAgents(): void;
 }
 
 export interface AgentEventEmitter {
   on(
     event: 'agentSetup',
-    handler: (agent: Agent, metadata: AgentMetadata) => void
+    handler: (agent: Agent, info: AgentInfo) => void
   ): void;
   on(
     event: 'agentMessage',
-    handler: (message: any, metadata: AgentMetadata) => void
+    handler: (message: any, info: AgentInfo) => void
   ): void;
-  on(
-    event: 'agentDisconnect',
-    handler: (metadata: AgentMetadata) => void
-  ): void;
+  on(event: 'agentDisconnect', handler: (info: AgentInfo) => void): void;
 }
 
-export class AgentManager implements AgentOperations {
-  private agents: Map<string, Agent> = new Map();
+export class AgentManager implements AgentOperations, AgentEventEmitter {
+  private agents: Map<AgentId, Runtime.Port> = new Map();
+  private agentsInfo: Map<AgentId, AgentInfo> = new Map();
   private eventHandlers: Map<string, Set<Function>> = new Map();
-  private contextCounters: Map<PorterContext, number> = new Map();
 
   constructor(private logger: Logger) {
     this.eventHandlers.set('agentSetup', new Set());
     this.eventHandlers.set('agentMessage', new Set());
     this.eventHandlers.set('agentDisconnect', new Set());
   }
+
+  public addAgent(
+    port: Runtime.Port,
+    context?: PorterContext
+  ): AgentId | undefined {
+    const connectionSource = this.identifyConnectionSource(port);
+    if (!connectionSource) {
+      this.logger.error(`Cannot add agent that did not have a sender`);
+      return;
+    }
+
+    const determinedContext = connectionSource.context;
+    const tabId = connectionSource.tabId || -1;
+    const frameId = connectionSource.frameId || -1;
+
+    // Find agents in the same tab or under the same extension context
+    const tabAgentsInfo = Array.from(this.agentsInfo.values()).filter(
+      (info) => {
+        return (
+          info.location.context === determinedContext &&
+          info.location.tabId === tabId &&
+          info.location.frameId === frameId
+        );
+      }
+    );
+
+    if (tabAgentsInfo.length > 0) {
+      this.logger.debug('Adding agent: Found existing similar agent.', {
+        tabAgentsInfo,
+      });
+    }
+
+    const agentId =
+      this.getAgentByLocation({ context: determinedContext, tabId, frameId })
+        ?.info?.id || (uuidv4() as AgentId);
+
+    this.agents.set(agentId, port);
+    const agentInfo: AgentInfo = {
+      id: agentId,
+      location: { context: determinedContext, tabId, frameId },
+      createdAt: Date.now(),
+      lastActiveAt: Date.now(),
+    };
+    this.agentsInfo.set(agentId, agentInfo);
+
+    port.onMessage.addListener((message: any) =>
+      this.emit('agentMessage', message, agentInfo)
+    );
+
+    port.onDisconnect.addListener(() => {
+      this.emit('agentDisconnect', agentInfo);
+      this.logger.debug('Agent disconnected, removing from manager. ', {
+        agentInfo,
+      });
+      this.removeAgent(agentId);
+    });
+
+    this.emit('agentSetup', agentInfo);
+    this.logger.debug('Setup complete for adding agent. ', {
+      agentInfo,
+    });
+    return agentId;
+  }
+
+  public getAgentByLocation(location: BrowserLocation): Agent | null {
+    const { context, tabId, frameId } = location;
+
+    const infoEntry: [AgentId, AgentInfo] | undefined = Array.from(
+      this.agentsInfo.entries()
+    ).find(
+      ([key, info]) =>
+        info.location.context === context &&
+        info.location.tabId === tabId &&
+        info.location.frameId === frameId
+    );
+    if (infoEntry === undefined) {
+      this.logger.error('No agent found for location. ', {
+        location,
+      });
+      return null;
+    }
+    const agentId = infoEntry[0];
+    let port = this.agents.get(agentId);
+    let info = this.agentsInfo.get(agentId);
+    if (!port || !info) {
+      this.logger.error('No agent found for location. ', {
+        location,
+      });
+      return null;
+    }
+    return { port, info };
+  }
+
+  public getAgentsByContext(context: PorterContext): Agent[] {
+    let infoForAgents = Array.from(this.agentsInfo.entries()).filter(
+      ([key, value]) => value.location.context === context
+    );
+    return infoForAgents.map(([key, value]) => ({
+      port: this.agents.get(key),
+      info: value,
+    }));
+  }
+
+  public getAllAgents(): Agent[] {
+    let allInfo = Array.from(this.agentsInfo.entries());
+    return allInfo.map(([key, value]) => ({
+      port: this.agents.get(key),
+      info: value,
+    }));
+  }
+
+  public queryAgents(location: Partial<BrowserLocation>): Agent[] {
+    let infoForAgents = Array.from(this.agentsInfo.entries()).filter(
+      ([key, value]) => {
+        const hasContext = location.context
+          ? value.location.context === location.context
+          : true;
+        const hasTabId = location.tabId
+          ? value.location.tabId === location.tabId
+          : true;
+        const hasFrameId = location.frameId
+          ? value.location.frameId === location.frameId
+          : true;
+        return hasContext && hasTabId && hasFrameId;
+      }
+    );
+    return infoForAgents.map(([key, value]) => ({
+      port: this.agents.get(key),
+      info: value,
+    }));
+  }
+
+  public getAgentById(id: AgentId): Agent | null {
+    let port = this.agents.get(id);
+    let info = this.agentsInfo.get(id);
+    if (!port || !info) {
+      this.logger.error('No agent found for agentId. ', {
+        id,
+      });
+      return null;
+    }
+    return { port, info };
+  }
+
+  public getAllAgentsInfo(): AgentInfo[] {
+    return Array.from(this.agentsInfo.values());
+  }
+
+  public hasPort(port: Runtime.Port): boolean {
+    const matchingPort = Array.from(this.agents.values()).find(
+      (p) => p.name === port.name
+    );
+    return !!matchingPort;
+  }
+
+  public removeAgent(agentId: AgentId) {
+    if (this.agents.has(agentId) && this.agentsInfo.has(agentId)) {
+      this.agents.delete(agentId);
+      this.agentsInfo.delete(agentId);
+    } else {
+      this.logger.error('No agent found to remove. ', {
+        agentId,
+      });
+    }
+  }
+
+  public printAgents() {
+    const allAgents = Array.from(this.agents.entries());
+    const allAgentsInfo = Array.from(this.agentsInfo.entries());
+    this.logger.debug('Current agents:', {
+      allAgents,
+      allAgentsInfo,
+    });
+  }
+
+  // private isContentScript(port: Runtime.Port) {
+  //   if (!port.sender) return false;
+  //   const hasFrame =
+  //     port.sender.tab &&
+  //     port.sender.tab.id !== undefined &&
+  //     port.sender.frameId !== undefined;
+  //   if (!hasFrame) return false;
+  //   if (!(port.sender as any).origin) return false;
+
+  //   const contentPage =
+  //     !(port.sender as any)!.origin.startsWith('chrome-extension://') &&
+  //     !(port.sender as any)!.tab!.url?.startsWith('moz-extension://');
+  //   return contentPage;
+  // }
 
   public on(event: string, handler: Function) {
     const handlers = this.eventHandlers.get(event);
@@ -61,269 +248,97 @@ export class AgentManager implements AgentOperations {
     handlers?.forEach((handler) => handler(...args));
   }
 
-  public getAgent(
-    options: {
-      index?: number;
-      subIndex?: number;
-      context: PorterContext;
-    } = { context: PorterContext.ContentScript }
-  ): Agent | Agent[] | null {
-    if (options.index === undefined) {
-      this.logger.debug('Getting agent by prefix: ', options.context);
-      // Return all agents for a context if no index provided. Defaults to content script.
-      return this.getAgentsByPrefix(options.context);
+  private identifyConnectionSource(port: Runtime.Port): {
+    context: PorterContext;
+    tabId?: number;
+    frameId?: number;
+    url?: string;
+    portName?: string;
+  } | null {
+    const sender = port.sender;
+    if (!sender) {
+      this.logger.error(`Cannot add agent that did not have a sender`);
+      return null;
     }
-    if (options.context === PorterContext.ContentScript) {
-      if (options.subIndex === undefined) {
-        this.logger.debug(
-          'Getting agent by prefix: ',
-          `${options.context}:${options.index}`
-        );
-        return this.getAgentsByPrefix(`${options.context}:${options.index}`);
-      }
+    // Cache the manifest data
+    const manifest = browser.runtime.getManifest();
 
-      // Return a specific content script agent
-      this.logger.debug(
-        'Getting specific agent by prefix: ',
-        `${options.context}:${options.index}:${options.subIndex}`
-      );
-      return (
-        this.agents.get(
-          `${options.context}:${options.index}:${options.subIndex}`
-        ) || null
-      );
-    }
-    // For non-ContentScript contexts, return the specific agent
-    this.logger.debug(
-      'Getting specific agent by prefix: ',
-      `${options.context}:${options.index}`
-    );
-    return this.agents.get(`${options.context}:${options.index}`) || null;
-  }
+    // Extract page URLs from manifest
+    const sidePanel = (manifest as any)?.side_panel?.default_path || '';
+    const optionsPage = (manifest as any).options_page || '';
+    const popupPage = (manifest as any).action?.default_popup || '';
+    const devtoolsPage = (manifest as any).devtools_page || '';
+    const newTabOverride = (manifest as any).chrome_url_overrides?.newtab || '';
+    const bookmarksOverride =
+      (manifest as any).chrome_url_overrides?.bookmarks || '';
+    const historyOverride =
+      (manifest as any).chrome_url_overrides?.history || '';
 
-  private getAgentsByContext(context: PorterContext): Agent[] {
-    return Array.from(this.agents.entries())
-      .filter(([key, _]) => key.startsWith(`${context}:`))
-      .map(([_, agent]) => agent);
-  }
-
-  private getAgentsByPrefix(prefix: string): Agent[] {
-    return Array.from(this.agents.entries())
-      .filter(([key, _]) => key.startsWith(`${prefix}:`))
-      .map(([_, agent]) => agent);
-  }
-
-  public getAllAgents(): Agent[] {
-    return Array.from(this.agents.entries()).map(([_, agent]) => agent);
-  }
-
-  public getAgentData(key: string): any {
-    return this.agents.get(key)?.data || {};
-  }
-
-  public setAgentData(key: string, data: any) {
-    const agent = this.agents.get(key);
-    if (agent) {
-      agent.data = data;
-    } else {
-      this.logger.warn('agent does not exist to set data on: ', key);
-    }
-  }
-
-  public getAgentByKey(key: string): Agent | null {
-    return this.agents.get(key) || null;
-  }
-
-  public getAgentMetadata(key: string): AgentMetadata | null {
-    const agent = this.agents.get(key);
-    if (!agent) return null;
-    // based on the key being in the format `${context}:${index}` + (subIndex ? `:${subIndex}` : '') we want to return an object with context, index, and subIndex
-    const [context, index, subIndex] = key.split(':');
-    return {
-      key,
-      connectionType: ConnectContext.NewAgent, // Todo: this cannot be determined from the key. Should we bother trying to determine it?
-      context: context as PorterContext,
-      location: {
-        index: parseInt(index),
-        subIndex: subIndex ? parseInt(subIndex) : undefined,
-      },
+    // Create URL endings for matching
+    // (handles both full paths and just filenames)
+    const pageMatchers = {
+      sidepanel: sidePanel ? sidePanel.split('/').pop() : 'sidepanel.html',
+      options: optionsPage ? optionsPage.split('/').pop() : 'options.html',
+      popup: popupPage ? popupPage.split('/').pop() : 'popup.html',
+      devtools: devtoolsPage ? devtoolsPage.split('/').pop() : 'devtools.html',
+      newtab: newTabOverride ? newTabOverride.split('/').pop() : 'newtab.html',
+      bookmarks: bookmarksOverride
+        ? bookmarksOverride.split('/').pop()
+        : 'bookmarks.html',
+      history: historyOverride
+        ? historyOverride.split('/').pop()
+        : 'history.html',
     };
-  }
 
-  public getAllAgentsMetadata(): AgentMetadata[] {
-    return Array.from(this.agents.keys())
-      .map((key) => this.getAgentMetadata(key))
-      .filter((meta) => meta !== null) as AgentMetadata[];
-  }
-
-  public addAgent(port: Runtime.Port, context: PorterContext) {
-    let adjustedContext = context;
-    let index = 0;
-    let subIndex;
-    let connectContext: ConnectContext;
-    if (port.sender && port.sender.tab !== undefined) {
-      index = port.sender.tab.id || 0;
-      subIndex = port.sender?.frameId || 0;
-      this.logger.debug(
-        `Searching for agent with similar name: ${adjustedContext}:${index}`
-      );
-      const tabAgents = Array.from(this.agents.keys()).filter((k) =>
-        k.startsWith(`${adjustedContext}:${index}:`)
-      );
-
-      if (tabAgents.length === 0) {
-        this.logger.debug(`No similar agents found, this is a new one.`);
-        connectContext = ConnectContext.NewTab;
-      } else if (
-        !tabAgents.includes(`${adjustedContext}:${index}:${subIndex}`)
-      ) {
-        this.logger.debug(
-          `Similar parent agent found, calling this a new frame`
-        );
-        connectContext = ConnectContext.NewFrame;
-      } else {
-        this.logger.debug(
-          `This exact agent name existed already, calling this a refreshed connection.`
-        );
-        connectContext = ConnectContext.RefreshConnection;
-      }
-    } else {
-      this.logger.debug(`Adding agent that did not have a tab id`);
-      index = this.contextCounters.get(adjustedContext) || 0;
-      this.contextCounters.set(adjustedContext, index + 1);
-      connectContext = ConnectContext.NewAgent;
+    // Content scripts (web pages)
+    if (sender.tab && sender.url && !sender.url.includes('extension://')) {
+      return {
+        context: PorterContext.ContentScript,
+        tabId: sender.tab.id,
+        frameId: sender.frameId || 0,
+        url: sender.url,
+        portName: port.name,
+      };
     }
-    this.logger.debug(
-      'Adding agent with context: ',
-      adjustedContext,
-      'index: ',
-      index,
-      'subIndex: ',
-      subIndex
-    );
-    const agentKey = this.getKey(adjustedContext, index, subIndex);
-    this.logger.debug('Agent key determined. Moving on to setup', agentKey);
-    this.setupAgent(port, adjustedContext, agentKey, connectContext, {
-      index,
-      subIndex,
-    });
-  }
 
-  private setupAgent(
-    port: Runtime.Port,
-    porterContext: PorterContext,
-    key: string,
-    connectContext: ConnectContext,
-    location: { index: number; subIndex?: number }
-  ) {
-    const agent = { port, data: null };
-    this.agents.set(key, agent);
+    // Extension pages
+    if (sender.url && sender.url.includes('extension://')) {
+      const urlPath = new URL(sender.url).pathname;
+      const filename = urlPath.split('/').pop();
 
-    const agentMetadata: AgentMetadata = {
-      key,
-      connectionType: connectContext,
-      context: porterContext,
-      location,
-    };
-    this.logger.debug('Sending onConnect event to listeners. ', key);
+      // Check against our manifest-derived page matchers
+      for (const [pageType, pageMatcher] of Object.entries(pageMatchers)) {
+        if (filename === pageMatcher) {
+          // It's a main extension page
+          // Different handling based on presence of tab
 
-    port.onMessage.addListener((message: any) =>
-      this.emit('agentMessage', message, agentMetadata)
-    );
-
-    port.onDisconnect.addListener(() => {
-      this.emit('agentDisconnect', agentMetadata);
-      this.removeAgent(agentMetadata);
-    });
-
-    this.logger.debug('Setup complete. ', key);
-    this.emit('agentSetup', agent, agentMetadata);
-    return agentMetadata;
-  }
-
-  public removeAgent(metadata: AgentMetadata) {
-    this.agents.delete(metadata.key);
-    if (!metadata.location || !metadata.location.subIndex) {
-      this.reindexContextAgents(metadata.context);
-    }
-  }
-
-  private reindexContextAgents(context: PorterContext) {
-    this.logger.debug('Reindexing agents for context: ', context);
-    const relevantAgents = this.getAgentsByContext(context);
-    relevantAgents.forEach((agent, index) => {
-      const oldKey = Array.from(this.agents.entries()).find(
-        ([_, a]) => a === agent
-      )?.[0];
-      if (oldKey) {
-        this.agents.delete(oldKey);
-        this.logger.debug('Deleting agent: ', oldKey);
-        const newKey = this.getKey(context, index);
-        this.agents.set(newKey, agent);
+          return {
+            context: pageType as PorterContext,
+            tabId: sender.tab?.id || 0,
+            frameId: sender.frameId || 0,
+            url: sender.url,
+            portName: port.name,
+          };
+        }
       }
-    });
-    this.contextCounters.set(context, relevantAgents.length);
-  }
 
-  // Todo: This is a standalone function, should be worked into getAgent
-  public buildAgentKey(
-    context: PorterContext,
-    index: number,
-    subIndex?: number
-  ): string {
-    if (subIndex === undefined) {
-      if (context === PorterContext.ContentScript) {
-        return `${context}:${index}:0`;
-      }
-      return `${context}:${index}`;
+      // It's some other extension page not specifically listed in our matchers
+
+      return {
+        context: PorterContext.Unknown,
+        tabId: sender.tab?.id || 0,
+        frameId: sender.frameId || 0,
+        url: sender.url,
+        portName: port.name,
+      };
     }
-    // Return a specific content script agent
-    return `${context}:${index}:${subIndex}`;
-  }
 
-  public getKey(
-    context: PorterContext,
-    index: number = 0,
-    subIndex?: number
-  ): string {
-    this.logger.debug(
-      'Getting key for context, index, subIndex: ',
-      context,
-      index,
-      subIndex
-    );
-    return (
-      `${context}:${index}` + (subIndex !== undefined ? `:${subIndex}` : ':0')
-    );
-  }
-
-  public printAgents() {
-    this.logger.debug('Current agents:', Array.from(this.agents.keys()));
-  }
-
-  private isContentScript(port: Runtime.Port) {
-    if (!port.sender) return false;
-    const hasFrame =
-      port.sender.tab &&
-      port.sender.tab.id !== undefined &&
-      port.sender.frameId !== undefined;
-    if (!hasFrame) return false;
-    if (!(port.sender as any).origin) return false;
-
-    const contentPage =
-      !(port.sender as any)!.origin.startsWith('chrome-extension://') &&
-      !(port.sender as any)!.tab!.url?.startsWith('moz-extension://');
-    return contentPage;
-  }
-
-  // Todo: Feels messy that we have both AgentMetadata and PostTarget. Should we consolidate?
-  public getTarget(agentMetadata: AgentMetadata): PostTarget | null {
+    // Fallback for unknown sources
     return {
-      context: agentMetadata.context as PorterContext,
-      location: {
-        index: agentMetadata.location.index,
-        subIndex: agentMetadata.location.subIndex ?? undefined,
-      },
+      context: PorterContext.Unknown,
+      tabId: 0,
+      url: sender.url,
+      portName: port.name,
     };
   }
 }

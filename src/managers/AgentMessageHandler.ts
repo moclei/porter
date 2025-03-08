@@ -1,11 +1,11 @@
 import { Runtime } from 'webextension-polyfill';
 import {
+  AgentInfo,
+  BrowserLocation,
   Message,
   MessageConfig,
   PorterError,
   PorterErrorType,
-  TargetAgent,
-  AgentMetadata,
 } from '../porter.model';
 import { Logger } from '../porter.utils';
 
@@ -15,27 +15,6 @@ export class AgentMessageHandler {
   private messageQueue: Array<{ message: Message<any>; timestamp: number }> =
     [];
   private config: MessageConfig | null = null;
-  private metadata: AgentMetadata | null = null;
-  private connections: AgentMetadata[] = [];
-
-  private readonly internalHandlers: MessageConfig = {
-    'porter-error': (message: Message<any>) => {
-      this.logger.error('internalHandlers, error message received: ', message);
-    },
-    'porter-disconnect': (message: Message<any>) => {
-      this.logger.debug(
-        'internalHandler, disconnect message received: ',
-        message
-      );
-    },
-    'porter-handshake': (message: Message<any>) => {
-      this.logger.debug(
-        'internalHandlers, handshake message received: ',
-        message
-      );
-      this.handleHandshake(message);
-    },
-  };
 
   constructor(private readonly logger: Logger) {}
 
@@ -76,22 +55,7 @@ export class AgentMessageHandler {
 
   private processMessage(port: Runtime.Port, message: any) {
     const action = message.action;
-    let handler;
-
-    if (message.action.startsWith('porter')) {
-      handler = this.internalHandlers[action];
-      if (handler) {
-        handler(message);
-      } else {
-        this.logger.error(
-          'No internal handler for message with action: ',
-          action
-        );
-      }
-      return;
-    }
-
-    handler = this.config?.[action];
+    const handler = this.config?.[action];
     if (handler) {
       this.logger.debug('Found handler, calling with message');
       handler(message);
@@ -100,14 +64,11 @@ export class AgentMessageHandler {
     }
   }
 
-  private handleHandshake(message: Message<any>) {
-    this.logger.debug('handleHandshake, message: ', message);
-    const { meta, currentConnections } = message.payload;
-    this.metadata = meta;
-    this.connections = currentConnections;
-  }
-
-  public post(port: Runtime.Port, message: Message<any>, target?: TargetAgent) {
+  public post(
+    port: Runtime.Port,
+    message: Message<any>,
+    target?: BrowserLocation
+  ) {
     this.logger.debug(`Sending message`, {
       action: message.action,
       target,

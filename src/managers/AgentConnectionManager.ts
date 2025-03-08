@@ -1,28 +1,20 @@
 import browser, { Runtime } from 'webextension-polyfill';
-import {
-  Agent,
-  AgentMetadata,
-  PorterContext,
-  PorterError,
-  PorterErrorType,
-} from '../porter.model';
+import { AgentInfo, PorterError, PorterErrorType } from '../porter.model';
 import { Logger } from '../porter.utils';
 
 export class AgentConnectionManager {
-  private readonly CONNECTION_TIMEOUT = 10000;
-  private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAY = 2000;
-  private connectionAttempts = 0;
+  private readonly CONNECTION_TIMEOUT = 5000;
   private connectionTimer: NodeJS.Timeout | null = null;
-  private agent: Agent | undefined;
+  private agentInfo: AgentInfo | null = null;
+  private port: Runtime.Port | null = null;
   private readonly logger: Logger;
-  private metadata: AgentMetadata | undefined;
+  private readonly connectionId: string;
 
   constructor(
     private readonly namespace: string,
-    private readonly context: PorterContext,
     logger: Logger
   ) {
+    this.connectionId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     this.logger = logger;
   }
 
@@ -32,90 +24,77 @@ export class AgentConnectionManager {
         clearTimeout(this.connectionTimer);
       }
 
-      this.connectionTimer = setTimeout(() => {
-        this.handleConnectionTimeout();
-      }, this.CONNECTION_TIMEOUT);
+      const portName = `${this.namespace}:${this.connectionId}`;
+      this.logger.debug('Connecting new port with name: ', { portName });
+      this.port = browser.runtime.connect({ name: portName });
 
-      const name = `${this.namespace}-${this.context}`;
-      this.logger.debug('Connecting new port with name: ', name);
-      const port = browser.runtime.connect({ name });
+      const handshakePromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(
+          () =>
+            reject(
+              new PorterError(
+                PorterErrorType.CONNECTION_TIMEOUT,
+                'Connection timed out waiting for handshake'
+              )
+            ),
+          this.CONNECTION_TIMEOUT
+        );
 
-      const connectionPromise = new Promise<void>((resolve, reject) => {
-        const handleInitialMessage = (message: any) => {
+        const onMessage = (message: any) => {
           if (message.action === 'porter-handshake') {
             this.logger.debug('Received handshake:', message);
-            clearTimeout(this.connectionTimer!);
-            port.onMessage.removeListener(handleInitialMessage);
-            this.metadata = message.payload.meta;
+            clearTimeout(timeout);
+            this.agentInfo = message.payload.info;
+            this.logger.debug('Agent info:', { agentInfo: this.agentInfo });
+            this.port?.onMessage.removeListener(onMessage);
             resolve();
+          } else if (message.action === 'porter-error') {
+            clearTimeout(timeout);
+            this.port?.onMessage.removeListener(onMessage);
+            this.logger.error('Error:', message);
+            reject(
+              new PorterError(
+                message.payload.type,
+                message.payload.message,
+                message.payload.details
+              )
+            );
           }
         };
-        port.onMessage.addListener(handleInitialMessage);
+
+        this.port?.onMessage.addListener(onMessage);
       });
 
-      this.agent = { port, data: {} };
+      this.port?.postMessage({
+        action: 'porter-init',
+        payload: {
+          info: this.agentInfo,
+          connectionId: this.connectionId,
+        },
+      });
 
-      await Promise.race([
-        connectionPromise,
-        new Promise((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new PorterError(
-                  PorterErrorType.CONNECTION_TIMEOUT,
-                  'Connection timed out waiting for handshake'
-                )
-              ),
-            this.CONNECTION_TIMEOUT
-          )
-        ),
-      ]);
-
-      this.connectionAttempts = 0;
+      await handshakePromise;
     } catch (error) {
-      this.logger.error('Connection failed:', error);
-      await this.handleConnectionFailure(error);
+      this.logger.error('Connection initialization failed:', error);
+      this.port?.disconnect();
+      this.port = null;
+      this.agentInfo = null;
+      throw error;
     }
   }
 
-  public getPort(): Runtime.Port | undefined {
-    return this.agent?.port;
+  public getPort(): Runtime.Port | null {
+    return this.port;
   }
 
-  public getMetadata(): AgentMetadata | undefined {
-    return this.metadata;
-  }
-
-  private async handleConnectionFailure(error: unknown): Promise<void> {
-    this.connectionAttempts++;
-
-    if (this.connectionAttempts < this.MAX_RETRIES) {
-      this.logger.warn(
-        `Connection attempt ${this.connectionAttempts} failed, retrying in ${this.RETRY_DELAY}ms...`
-      );
-      await new Promise((resolve) => setTimeout(resolve, this.RETRY_DELAY));
-      await this.initializeConnection();
-    } else {
-      const finalError = new PorterError(
-        PorterErrorType.CONNECTION_FAILED,
-        'Failed to establish connection after maximum retries',
-        { attempts: this.connectionAttempts, originalError: error }
-      );
-      this.logger.error('Max connection attempts reached:', finalError);
-      throw finalError;
-    }
-  }
-
-  private handleConnectionTimeout() {
-    this.logger.error('Connection timed out');
-    if (this.agent?.port) {
-      this.handleDisconnect(this.agent.port);
-    }
+  public getAgentInfo(): AgentInfo | null {
+    return this.agentInfo;
   }
 
   public handleDisconnect(port: Runtime.Port) {
     this.logger.debug('handleDisconnect');
-    delete this.agent?.port;
+    this.port = null;
+    this.agentInfo = null;
   }
 
   public getNamespace(): string {

@@ -1,18 +1,15 @@
 import browser, { Runtime } from 'webextension-polyfill';
 import {
-  AgentMetadata,
-  ConnectContext,
+  AgentInfo,
   Listener,
   Message,
   MessageConfig,
-  MessageListener,
   PorterError,
   PorterErrorType,
-  PorterEvent,
-  PostTarget,
+  BrowserLocation,
   Unsubscribe,
 } from '../porter.model';
-import { Agent, PorterContext } from '../porter.model';
+import { Agent } from '../porter.model';
 import { isServiceWorker } from '../porter.utils';
 import { Logger } from '../porter.utils';
 import { AgentManager } from '../managers/AgentManager';
@@ -48,22 +45,19 @@ export class PorterSource {
     // Wire up event handlers
     this.agentManager.on(
       'agentMessage',
-      (message: any, metadata: AgentMetadata) => {
+      (message: any, metadata: AgentInfo) => {
         this.messageHandler.handleIncomingMessage(message, metadata);
       }
     );
 
-    this.agentManager.on('agentDisconnect', (metadata: AgentMetadata) => {
+    this.agentManager.on('agentDisconnect', (metadata: AgentInfo) => {
       this.messageHandler.handleDisconnect(metadata);
     });
 
-    this.agentManager.on(
-      'agentSetup',
-      (agent: Agent, metadata: AgentMetadata) => {
-        this.messageHandler.handleConnect(metadata);
-        this.connectionManager.confirmConnection(agent.port!, metadata);
-      }
-    );
+    this.agentManager.on('agentSetup', (agent: Agent, metadata: AgentInfo) => {
+      this.messageHandler.handleConnect(metadata);
+      this.connectionManager.confirmConnection(agent.port!, metadata);
+    });
 
     browser.runtime.onConnect.addListener(
       this.connectionManager.handleConnection.bind(this.connectionManager)
@@ -91,7 +85,7 @@ export class PorterSource {
   }
 
   // Public API methods that will be exposed via the source function
-  public post(message: Message<any>, target?: PostTarget): Promise<void> {
+  public post(message: Message<any>, target?: BrowserLocation): Promise<void> {
     return this.messageHandler.post(message, target);
   }
 
@@ -112,26 +106,13 @@ export class PorterSource {
   }
 
   // Utility methods that might be needed externally
-  public getMetadata(key: string): AgentMetadata | null {
-    return this.agentManager.getAgentMetadata(key);
-  }
-
-  public getTarget(metadata: AgentMetadata): PostTarget | null {
-    return this.agentManager.getTarget(metadata);
-  }
-
-  public buildAgentKey(
-    context: PorterContext,
-    index: number,
-    subIndex?: number
-  ): string {
-    return this.agentManager.buildAgentKey(context, index, subIndex);
+  public getInfo(key: string): AgentInfo | null {
+    return this.agentManager.getAgentById(key)?.info || null;
   }
 }
-
 export function source(namespace: string = 'porter'): [
   // post function
-  (message: Message<any>, target?: PostTarget) => Promise<void>,
+  (message: Message<any>, target?: BrowserLocation) => Promise<void>,
   // onMessage function
   (config: MessageConfig) => Unsubscribe,
   // onConnect function
@@ -151,23 +132,6 @@ export function source(namespace: string = 'porter'): [
   ];
 }
 
-export function getMetadata(key: string): AgentMetadata | null {
-  return PorterSource.getInstance().getMetadata(key);
-}
-
-export function getTarget(agentMetadata: AgentMetadata): PostTarget | null {
-  return PorterSource.getInstance().getTarget(agentMetadata);
-}
-
-export function getKey(options: {
-  index: number;
-  subIndex?: number;
-  context: PorterContext;
-}): string | null {
-  console.log('PorterSource: getKey called externally with options: ', options);
-  return PorterSource.getInstance().buildAgentKey(
-    options.context,
-    options.index,
-    options.subIndex
-  );
+export function getInfo(key: string): AgentInfo | null {
+  return PorterSource.getInstance().getInfo(key);
 }
