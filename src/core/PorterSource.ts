@@ -119,7 +119,7 @@ export class PorterSource {
 }
 export function source(namespace: string = 'porter'): [
   // post function
-  (message: Message<any>, target?: BrowserLocation) => Promise<void>,
+  (message: Message<any>, target?: MessageTarget) => Promise<void>,
   // onMessage function
   (config: MessageConfig) => Unsubscribe,
   // onConnect function
