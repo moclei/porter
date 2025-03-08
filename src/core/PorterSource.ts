@@ -138,10 +138,6 @@ export function source(namespace: string = 'porter'): [
   ];
 }
 
-export function getInfo(id: AgentId): AgentInfo | null {
-  return PorterSource.getInstance().getInfo(key);
-}
-
 export function getAgentById(id: AgentId): Agent | null {
   return PorterSource.getInstance().getAgentById(id);
 }
