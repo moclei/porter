@@ -1,9 +1,9 @@
 import {
+  AgentInfo,
+  BrowserLocation,
   Message,
   MessageConfig,
   PorterContext,
-  TargetAgent,
-  AgentMetadata,
 } from '../porter.model';
 import { AgentConnectionManager } from '../managers/AgentConnectionManager';
 import { AgentMessageHandler } from '../managers/AgentMessageHandler';
@@ -22,11 +22,7 @@ export class PorterAgent {
     const context = options.agentContext ?? this.determineContext();
 
     this.logger = Logger.getLogger(`Agent`);
-    this.connectionManager = new AgentConnectionManager(
-      namespace,
-      context,
-      this.logger
-    );
+    this.connectionManager = new AgentConnectionManager(namespace, this.logger);
     this.messageHandler = new AgentMessageHandler(this.logger);
 
     this.logger.info('Initializing with options: ', options);
@@ -65,7 +61,7 @@ export class PorterAgent {
     port?.postMessage({ action: 'porter-messages-established' });
   }
 
-  public post(message: Message<any>, target?: TargetAgent) {
+  public post(message: Message<any>, target?: BrowserLocation) {
     const port = this.connectionManager.getPort();
     if (port) {
       this.messageHandler.post(port, message, target);
@@ -79,8 +75,8 @@ export class PorterAgent {
     return PorterContext.Extension;
   }
 
-  public getAgentMetadata(): AgentMetadata | null {
-    return this.connectionManager.getMetadata() || null;
+  public getAgentMetadata(): AgentInfo | null {
+    return this.connectionManager.getAgentInfo() || null;
   }
 }
 
@@ -88,9 +84,9 @@ export function connect(options?: {
   agentContext?: PorterContext;
   namespace?: string;
 }): [
-  (message: Message<any>, target?: TargetAgent) => void,
+  (message: Message<any>, target?: BrowserLocation) => void,
   (config: MessageConfig) => void,
-  () => AgentMetadata | null,
+  () => AgentInfo | null,
 ] {
   const porterInstance = PorterAgent.getInstance(options);
   return [

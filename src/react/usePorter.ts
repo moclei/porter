@@ -1,11 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import {
-  AgentMetadata,
-  connect,
-  Message,
-  MessageConfig,
-  PorterContext,
-} from '../';
+import { AgentInfo, connect, Message, MessageConfig, PorterContext } from '../';
 
 interface PorterMessage {
   action: string;
@@ -17,7 +11,7 @@ interface UsePorterResult {
   setMessage: (handlers: MessageConfig) => void;
   isConnected: boolean;
   error: Error | null;
-  metadata: AgentMetadata | null;
+  metadata: AgentInfo | null;
 }
 
 export function usePorter(options?: {
@@ -26,12 +20,12 @@ export function usePorter(options?: {
 }): UsePorterResult {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
-  const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
+  const [metadata, setMetadata] = useState<AgentInfo | null>(null);
   const postRef = useRef<((message: Message<any>) => void) | null>(null);
   const setMessageRef = useRef<((handlers: MessageConfig) => void) | null>(
     null
   );
-  const getMetadataRef = useRef<(() => AgentMetadata | null) | null>(null);
+  const getMetadataRef = useRef<(() => AgentInfo | null) | null>(null);
 
   const memoizedOptions = useMemo(
     () => ({
