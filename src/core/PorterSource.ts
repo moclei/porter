@@ -8,6 +8,7 @@ import {
   PorterErrorType,
   BrowserLocation,
   Unsubscribe,
+  AgentId,
 } from '../porter.model';
 import { Agent } from '../porter.model';
 import { isServiceWorker } from '../porter.utils';
@@ -109,6 +110,11 @@ export class PorterSource {
   public getInfo(key: string): AgentInfo | null {
     return this.agentManager.getAgentById(key)?.info || null;
   }
+
+  // Utility methods that might be needed externally
+  public getAgentById(agentId: AgentId): Agent | null {
+    return this.agentManager.getAgentById(agentId);
+  }
 }
 export function source(namespace: string = 'porter'): [
   // post function
@@ -132,6 +138,10 @@ export function source(namespace: string = 'porter'): [
   ];
 }
 
-export function getInfo(key: string): AgentInfo | null {
+export function getInfo(id: AgentId): AgentInfo | null {
   return PorterSource.getInstance().getInfo(key);
+}
+
+export function getAgentById(id: AgentId): Agent | null {
+  return PorterSource.getInstance().getAgentById(id);
 }
