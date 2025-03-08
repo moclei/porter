@@ -9,6 +9,7 @@ import {
   BrowserLocation,
   Unsubscribe,
   AgentId,
+  MessageTarget,
 } from '../porter.model';
 import { Agent } from '../porter.model';
 import { isServiceWorker } from '../porter.utils';
@@ -86,7 +87,7 @@ export class PorterSource {
   }
 
   // Public API methods that will be exposed via the source function
-  public post(message: Message<any>, target?: BrowserLocation): Promise<void> {
+  public post(message: Message<any>, target?: MessageTarget): Promise<void> {
     return this.messageHandler.post(message, target);
   }
 
