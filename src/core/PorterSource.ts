@@ -116,6 +116,14 @@ export class PorterSource {
   public getAgentById(agentId: AgentId): Agent | null {
     return this.agentManager.getAgentById(agentId);
   }
+
+  public getAgentByLocation(location: BrowserLocation): Agent | null {
+    return this.agentManager.getAgentByLocation(location);
+  }
+
+  public queryAgents(location: Partial<BrowserLocation>): Agent[] {
+    return this.agentManager.queryAgents(location);
+  }
 }
 export function source(namespace: string = 'porter'): [
   // post function
@@ -141,4 +149,12 @@ export function source(namespace: string = 'porter'): [
 
 export function getAgentById(id: AgentId): Agent | null {
   return PorterSource.getInstance().getAgentById(id);
+}
+
+export function getAgentByLocation(location: BrowserLocation): Agent | null {
+  return PorterSource.getInstance().getAgentByLocation(location);
+}
+
+export function queryAgents(location: Partial<BrowserLocation>): Agent[] {
+  return PorterSource.getInstance().queryAgents(location);
 }
