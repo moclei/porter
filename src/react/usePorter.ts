@@ -1,11 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AgentInfo, connect, Message, MessageConfig, PorterContext } from '../';
 
-interface PorterMessage {
-  action: string;
-  payload: any;
-}
-
 interface UsePorterResult {
   post: (message: Message<any>) => void;
   setMessage: (handlers: MessageConfig) => void;

@@ -25,7 +25,7 @@ export class PorterAgent {
     this.connectionManager = new AgentConnectionManager(namespace, this.logger);
     this.messageHandler = new AgentMessageHandler(this.logger);
 
-    this.logger.info('Initializing with options: ', options);
+    this.logger.info('Initializing with options: ', options, context);
     this.initializeConnection();
   }
 
