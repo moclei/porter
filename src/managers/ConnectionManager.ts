@@ -23,7 +23,7 @@ export class ConnectionManager {
       if (!port.name || !port.name.startsWith(this.namespace + ':')) {
         throw new PorterError(
           PorterErrorType.INVALID_CONTEXT,
-          'Invalid namespace or port name format'
+          `Invalid namespace or port name format. port name was ${port?.name || 'port undefined'} but namespace is ${this.namespace}`
         );
       }
 
