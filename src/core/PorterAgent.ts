@@ -63,8 +63,14 @@ export class PorterAgent {
 
   public post(message: Message<any>, target?: BrowserLocation) {
     const port = this.connectionManager.getPort();
+    this.logger.debug('Posting message', { message, target, port });
     if (port) {
       this.messageHandler.post(port, message, target);
+    } else {
+      this.logger.error('No port found when posting message', {
+        message,
+        target,
+      });
     }
   }
 
