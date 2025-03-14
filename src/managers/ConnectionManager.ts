@@ -53,12 +53,13 @@ export class ConnectionManager {
       // Remove this listener since we only need it once
       port.onMessage.removeListener(this.handleInitMessage.bind(this, port));
 
-      const { info, connectionId } = message.payload;
+      const { connectionId } = message.payload;
 
-      if (!info || !connectionId) {
+      if (!connectionId) {
         throw new PorterError(
           PorterErrorType.INVALID_CONTEXT,
-          'Missing context or connection ID'
+          'Missing context or connection ID. Message was: ' +
+            JSON.stringify(message)
         );
       }
 
