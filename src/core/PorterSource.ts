@@ -25,9 +25,15 @@ export class PorterSource {
   private readonly connectionManager: ConnectionManager;
   private readonly logger: Logger;
   private static staticLogger = Logger.getLogger('SW');
+  private namespace: string;
 
-  private constructor(private namespace: string = 'porter') {
-    this.logger = Logger.getLogger(`SW:${namespace}`);
+  private constructor(namespace?: string) {
+    this.logger = Logger.getLogger(`SW`);
+    this.namespace = namespace || 'porter';
+    if (!namespace) {
+      this.logger.error('No namespace provided, defaulting to "porter"');
+    }
+
     this.agentManager = new AgentManager(this.logger);
     this.messageHandler = new MessageHandler(this.agentManager, this.logger);
     this.connectionManager = new ConnectionManager(
