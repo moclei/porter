@@ -51,6 +51,7 @@ export class AgentManager implements AgentOperations, AgentEventEmitter {
     port: Runtime.Port,
     context?: PorterContext
   ): AgentId | undefined {
+    this.logger.debug(`Adding agent with context: ${context}`, { port });
     const connectionSource = this.identifyConnectionSource(port);
     if (!connectionSource) {
       this.logger.error(`Cannot add agent that did not have a sender`);
@@ -59,8 +60,13 @@ export class AgentManager implements AgentOperations, AgentEventEmitter {
 
     const determinedContext = connectionSource.context;
     const tabId = connectionSource.tabId || -1;
-    const frameId = connectionSource.frameId || -1;
+    const frameId = connectionSource.frameId || 0;
 
+    this.logger.debug(`Determined context for new agent`, {
+      determinedContext,
+      tabId,
+      frameId,
+    });
     // Find agents in the same tab or under the same extension context
     const tabAgentsInfo = Array.from(this.agentsInfo.values()).filter(
       (info) => {
@@ -82,6 +88,8 @@ export class AgentManager implements AgentOperations, AgentEventEmitter {
       this.getAgentByLocation({ context: determinedContext, tabId, frameId })
         ?.info?.id || (uuidv4() as AgentId);
 
+    this.logger.debug(`Adding agent with id: ${agentId}`);
+
     this.agents.set(agentId, port);
     const agentInfo: AgentInfo = {
       id: agentId,
@@ -91,6 +99,7 @@ export class AgentManager implements AgentOperations, AgentEventEmitter {
     };
     this.agentsInfo.set(agentId, agentInfo);
 
+    this.logger.debug(`Constructed agent info: ${JSON.stringify(agentInfo)}`);
     port.onMessage.addListener((message: any) =>
       this.emit('agentMessage', message, agentInfo)
     );
