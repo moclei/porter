@@ -19,7 +19,7 @@ import { ConnectionManager } from '../managers/ConnectionManager';
 import { MessageHandler } from '../managers/MessageHandler';
 
 export class PorterSource {
-  private static instance: PorterSource | null = null;
+  private static instances: Map<string, PorterSource> = new Map();
   private readonly agentManager: AgentManager;
   private readonly messageHandler: MessageHandler;
   private readonly connectionManager: ConnectionManager;
@@ -41,7 +41,7 @@ export class PorterSource {
       this.namespace,
       this.logger
     );
-    this.logger.info('Constructing Porter');
+    this.logger.info(`Constructing Porter with namespace: ${this.namespace}`);
 
     if (!isServiceWorker()) {
       throw new PorterError(
@@ -76,20 +76,17 @@ export class PorterSource {
     PorterSource.staticLogger.debug(
       `Getting instance for namespace: ${namespace}`
     );
-    if (
-      !PorterSource.instance ||
-      PorterSource.instance.namespace !== namespace
-    ) {
+    if (!PorterSource.instances.has(namespace)) {
       PorterSource.staticLogger.info(
         `Creating new instance for namespace: ${namespace}`
       );
-      PorterSource.instance = new PorterSource(namespace);
+      PorterSource.instances.set(namespace, new PorterSource(namespace));
     } else {
       PorterSource.staticLogger.debug(
         `Reusing existing instance for namespace: ${namespace}`
       );
     }
-    return PorterSource.instance;
+    return PorterSource.instances.get(namespace)!;
   }
 
   // Public API methods that will be exposed via the source function
@@ -131,36 +128,28 @@ export class PorterSource {
     return this.agentManager.queryAgents(location);
   }
 }
-export function source(namespace: string = 'porter'): [
-  // post function
-  (message: Message<any>, target?: MessageTarget) => Promise<void>,
-  // onMessage function
-  (config: MessageConfig) => Unsubscribe,
-  // onConnect function
-  (listener: Listener<'onConnect'>) => Unsubscribe,
-  // onDisconnect function
-  (listener: Listener<'onDisconnect'>) => Unsubscribe,
-  // onMessagesSet function
-  (listener: Listener<'onMessagesSet'>) => Unsubscribe,
-] {
+
+export interface PorterAPI {
+  post: (message: Message<any>, target?: MessageTarget) => Promise<void>;
+  onMessage: (config: MessageConfig) => Unsubscribe;
+  onConnect: (listener: Listener<'onConnect'>) => Unsubscribe;
+  onDisconnect: (listener: Listener<'onDisconnect'>) => Unsubscribe;
+  onMessagesSet: (listener: Listener<'onMessagesSet'>) => Unsubscribe;
+  getAgentById: (id: AgentId) => Agent | null;
+  getAgentByLocation: (location: BrowserLocation) => Agent | null;
+  queryAgents: (location: Partial<BrowserLocation>) => Agent[];
+}
+
+export function source(namespace: string = 'porter'): PorterAPI {
   const instance = PorterSource.getInstance(namespace);
-  return [
-    instance.post.bind(instance),
-    instance.onMessage.bind(instance),
-    instance.onConnect.bind(instance),
-    instance.onDisconnect.bind(instance),
-    instance.onMessagesSet.bind(instance),
-  ];
-}
-
-export function getAgentById(id: AgentId): Agent | null {
-  return PorterSource.getInstance().getAgentById(id);
-}
-
-export function getAgentByLocation(location: BrowserLocation): Agent | null {
-  return PorterSource.getInstance().getAgentByLocation(location);
-}
-
-export function queryAgents(location: Partial<BrowserLocation>): Agent[] {
-  return PorterSource.getInstance().queryAgents(location);
+  return {
+    post: instance.post.bind(instance),
+    onMessage: instance.onMessage.bind(instance),
+    onConnect: instance.onConnect.bind(instance),
+    onDisconnect: instance.onDisconnect.bind(instance),
+    onMessagesSet: instance.onMessagesSet.bind(instance),
+    getAgentById: instance.getAgentById.bind(instance),
+    getAgentByLocation: instance.getAgentByLocation.bind(instance),
+    queryAgents: instance.queryAgents.bind(instance),
+  };
 }
