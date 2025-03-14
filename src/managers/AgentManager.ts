@@ -48,7 +48,7 @@ export class AgentManager implements AgentOperations, AgentEventEmitter {
     port: Runtime.Port,
     context?: PorterContext
   ): AgentId | undefined {
-    this.logger.debug(`Adding agent with context: ${context}`, { port });
+    this.logger.debug(`Adding agent`, { context, port });
     const connectionSource = this.identifyConnectionSource(port);
     if (!connectionSource) {
       this.logger.error(`Cannot add agent that did not have a sender`);
