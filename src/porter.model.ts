@@ -101,6 +101,7 @@ export enum PorterErrorType {
   INVALID_TARGET = 'invalid-target',
   MESSAGE_FAILED = 'message-failed',
   INVALID_CONTEXT = 'invalid-context',
+  INVALID_PORT = 'invalid-port',
 }
 
 export class PorterError extends Error {

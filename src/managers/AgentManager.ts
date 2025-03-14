@@ -25,10 +25,7 @@ export interface AgentOperations {
 }
 
 export interface AgentEventEmitter {
-  on(
-    event: 'agentSetup',
-    handler: (agent: Agent, info: AgentInfo) => void
-  ): void;
+  on(event: 'agentSetup', handler: (agent: Agent) => void): void;
   on(
     event: 'agentMessage',
     handler: (message: any, info: AgentInfo) => void
@@ -91,6 +88,7 @@ export class AgentManager implements AgentOperations, AgentEventEmitter {
     this.logger.debug(`Adding agent with id: ${agentId}`);
 
     this.agents.set(agentId, port);
+
     const agentInfo: AgentInfo = {
       id: agentId,
       location: { context: determinedContext, tabId, frameId },
@@ -104,6 +102,7 @@ export class AgentManager implements AgentOperations, AgentEventEmitter {
       this.emit('agentMessage', message, agentInfo)
     );
 
+    const agent: Agent = { port, info: agentInfo };
     port.onDisconnect.addListener(() => {
       this.emit('agentDisconnect', agentInfo);
       this.logger.debug('Agent disconnected, removing from manager. ', {
@@ -112,7 +111,7 @@ export class AgentManager implements AgentOperations, AgentEventEmitter {
       this.removeAgent(agentId);
     });
 
-    this.emit('agentSetup', agentInfo);
+    this.emit('agentSetup', agent);
     this.logger.debug('Setup complete for adding agent. ', {
       agentInfo,
     });

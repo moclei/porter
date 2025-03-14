@@ -47,12 +47,9 @@ export function usePorter(options?: {
           // Set up internal porter-handshake handler
           setMessage({
             'porter-handshake': (message: Message<any>) => {
-              console.log(
-                '[PORTER] porter-handshake heard: ',
-                message.payload.meta
-              );
+              console.log('[PORTER] porter-handshake heard: ', message.payload);
               if (isMounted) {
-                setMetadata(message.payload.meta);
+                setMetadata(message.payload.info);
               }
             },
           });
