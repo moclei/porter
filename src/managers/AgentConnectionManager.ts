@@ -45,7 +45,9 @@ export class AgentConnectionManager {
             this.logger.debug('Received handshake:', message);
             clearTimeout(timeout);
             this.agentInfo = message.payload.info;
-            this.logger.debug('Agent info:', { agentInfo: this.agentInfo });
+            this.logger.debug('Handshake agent info:', {
+              agentInfo: this.agentInfo,
+            });
             this.port?.onMessage.removeListener(onMessage);
             resolve();
           } else if (message.action === 'porter-error') {

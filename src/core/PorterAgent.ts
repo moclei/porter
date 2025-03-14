@@ -25,7 +25,7 @@ export class PorterAgent {
     this.connectionManager = new AgentConnectionManager(namespace, this.logger);
     this.messageHandler = new AgentMessageHandler(this.logger);
 
-    this.logger.info('Initializing with options: ', options, context);
+    this.logger.info('Initializing with options: ', { options, context });
     this.initializeConnection();
   }
 
@@ -75,7 +75,7 @@ export class PorterAgent {
     return PorterContext.Extension;
   }
 
-  public getAgentMetadata(): AgentInfo | null {
+  public getAgentInfo(): AgentInfo | null {
     return this.connectionManager.getAgentInfo() || null;
   }
 }
@@ -92,6 +92,6 @@ export function connect(options?: {
   return [
     porterInstance.post.bind(porterInstance),
     porterInstance.onMessage.bind(porterInstance),
-    porterInstance.getAgentMetadata.bind(porterInstance),
+    porterInstance.getAgentInfo.bind(porterInstance),
   ];
 }

@@ -6,7 +6,7 @@ interface UsePorterResult {
   setMessage: (handlers: MessageConfig) => void;
   isConnected: boolean;
   error: Error | null;
-  metadata: AgentInfo | null;
+  agentInfo: AgentInfo | null;
 }
 
 export function usePorter(options?: {
@@ -15,12 +15,12 @@ export function usePorter(options?: {
 }): UsePorterResult {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
-  const [metadata, setMetadata] = useState<AgentInfo | null>(null);
+  const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
   const postRef = useRef<((message: Message<any>) => void) | null>(null);
   const setMessageRef = useRef<((handlers: MessageConfig) => void) | null>(
     null
   );
-  const getMetadataRef = useRef<(() => AgentInfo | null) | null>(null);
+  const getAgentInfoRef = useRef<(() => AgentInfo | null) | null>(null);
 
   const memoizedOptions = useMemo(
     () => ({
@@ -35,12 +35,12 @@ export function usePorter(options?: {
 
     const initializePorter = async () => {
       try {
-        const [post, setMessage, getMetadata] = await connect(memoizedOptions);
+        const [post, setMessage, getAgentInfo] = await connect(memoizedOptions);
 
         if (isMounted) {
           postRef.current = post;
           setMessageRef.current = setMessage;
-          getMetadataRef.current = getMetadata;
+          getAgentInfoRef.current = getAgentInfo;
           setIsConnected(true);
           setError(null);
 
@@ -49,7 +49,7 @@ export function usePorter(options?: {
             'porter-handshake': (message: Message<any>) => {
               console.log('[PORTER] porter-handshake heard: ', message.payload);
               if (isMounted) {
-                setMetadata(message.payload.info);
+                setAgentInfo(message.payload.info);
               }
             },
           });
@@ -106,5 +106,5 @@ export function usePorter(options?: {
     }
   }, []);
 
-  return { post, setMessage, isConnected, error, metadata };
+  return { post, setMessage, isConnected, error, agentInfo };
 }

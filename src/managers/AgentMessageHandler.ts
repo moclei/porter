@@ -59,7 +59,10 @@ export class AgentMessageHandler {
       this.logger.debug('Found handler, calling with message');
       handler(message);
     } else {
-      this.logger.debug(`No handler for message with action: ${action}`);
+      this.logger.debug(
+        `No handler for message with action: ${action}, existing handlers are: `,
+        { messageConfig: this.config }
+      );
     }
   }
 
