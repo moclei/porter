@@ -7,7 +7,7 @@ chrome.sidePanel
 
 let originalTabId: number | null = null;
 
-const [post, onMessage, onConnect, onDisconnect, onMessagesSet] = source();
+const { post, onMessage, onConnect, onDisconnect, onMessagesSet } = source();
 
 onMessage({
   'test-echo': (message, agent) => {
