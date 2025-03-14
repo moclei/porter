@@ -1,6 +1,11 @@
 import { Runtime } from 'webextension-polyfill';
 import { AgentOperations } from './AgentManager';
-import { AgentInfo, PorterError, PorterErrorType } from '../porter.model';
+import {
+  Agent,
+  AgentInfo,
+  PorterError,
+  PorterErrorType,
+} from '../porter.model';
 import { Logger } from '../porter.utils';
 
 export class ConnectionManager {
@@ -77,7 +82,7 @@ export class ConnectionManager {
       const agent = this.agentOperations.getAgentById(agentId);
 
       if (agent) {
-        this.confirmConnection(port, agent.info);
+        this.confirmConnection(agent);
       }
 
       this.agentOperations.printAgents();
@@ -118,14 +123,20 @@ export class ConnectionManager {
     }
   }
 
-  public confirmConnection(port: Runtime.Port, info: AgentInfo) {
+  public confirmConnection(agent: Agent) {
     this.logger.debug('Sending confirmation message back to initiator ', {
-      info,
+      agent,
     });
-    port.postMessage({
+    if (!agent.port) {
+      throw new PorterError(
+        PorterErrorType.INVALID_PORT,
+        'Agent port is undefined when confirming connection'
+      );
+    }
+    agent.port.postMessage({
       action: 'porter-handshake',
       payload: {
-        info,
+        info: agent.info,
         currentConnections: this.agentOperations.getAllAgentsInfo(),
       },
     });
