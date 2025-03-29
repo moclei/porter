@@ -35,7 +35,7 @@ const build = () => {
   contentSrcDirs.forEach((contentDir) => {
     fs.readdirSync(path.join(srcDir, contentDir)).forEach((file) => {
       ensureDirExists(path.join(distDir, contentDir));
-      if (file === 'index.tsx') {
+      if (file.endsWith('.ts')) {
         esbuild
           .build({
             entryPoints: [path.join(srcDir, contentDir, file)],

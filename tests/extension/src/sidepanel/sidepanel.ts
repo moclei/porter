@@ -1,49 +1,101 @@
 import { connect } from 'porter-source';
 
-const [post, onMessage] = connect();
+const [post, onMessage, getAgentMetadata] = connect();
+
+let messageCount = 0;
+let messageInterval: NodeJS.Timeout | null = null;
+let isTestRunning = false;
 
 // Set up test message handlers
 onMessage({
   'echo-response': (message) => {
-    console.log('Received echo:', message.payload);
+    log(`Received echo: ${JSON.stringify(message.payload)}`);
   },
-  'broadcast-message': (message) => {
-    console.log('Received broadcast:', message.payload);
+  'status-response': (message) => {
+    log(`Service worker status: ${JSON.stringify(message.payload)}`);
   },
 });
 
-// Run tests automatically
-function runTests() {
-  // Test basic messaging
-  post({ action: 'test-echo', payload: 'Hello!' });
+function log(message: string) {
+  const logElement = document.getElementById('log');
+  if (logElement) {
+    const timestamp = new Date().toISOString();
+    logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+    logElement.scrollTop = logElement.scrollHeight;
+  }
+}
 
-  // Test broadcasting
-  post({ action: 'test-broadcast', payload: 'Broadcast test' });
+function updateStatus(message: string) {
+  const statusElement = document.getElementById('status');
+  if (statusElement) {
+    statusElement.textContent = `Status: ${message}`;
+  }
+}
 
-  // Test error handling
+function sendTestMessage() {
+  messageCount++;
+  const message = {
+    action: 'test-echo',
+    payload: `Test message ${messageCount} at ${new Date().toISOString()}`,
+  };
+
   try {
-    post({ action: 'non-existent' });
+    post(message);
+    log(`Sent message: ${JSON.stringify(message)}`);
   } catch (error) {
-    console.log('Expected error caught:', error);
+    log(`Failed to send message: ${error}`);
+  }
+}
+
+function startTest() {
+  if (isTestRunning) return;
+
+  isTestRunning = true;
+  messageCount = 0;
+  updateStatus('Running test - sending messages...');
+
+  // Send messages every second for 5 seconds
+  messageInterval = setInterval(() => {
+    sendTestMessage();
+  }, 1000);
+
+  // Stop after 5 seconds
+  setTimeout(() => {
+    if (messageInterval) {
+      clearInterval(messageInterval);
+      messageInterval = null;
+    }
+    isTestRunning = false;
+    updateStatus('Test complete - waiting for service worker shutdown...');
+
+    // Enable the send message button
+    const sendButton = document.getElementById(
+      'send-message'
+    ) as HTMLButtonElement;
+    if (sendButton) {
+      sendButton.disabled = false;
+    }
+  }, 5000);
+}
+
+function sendSingleMessage() {
+  if (!isTestRunning) {
+    sendTestMessage();
   }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const testButton = document.querySelector('#run-tests');
-  if (testButton) {
-    testButton.addEventListener('click', runTests);
+  const startButton = document.getElementById('start-test');
+  if (startButton) {
+    startButton.addEventListener('click', startTest);
   }
 
-  const popupButton = document.querySelector('#open-popup');
-  if (popupButton) {
-    popupButton.addEventListener('click', async () => {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-      if (tab?.id) {
-        await chrome.action.openPopup();
-      }
-    });
+  const sendButton = document.getElementById('send-message');
+  if (sendButton) {
+    sendButton.addEventListener('click', sendSingleMessage);
   }
+
+  // Log initial connection
+  log('Sidepanel connected');
+  log(`Agent metadata: ${JSON.stringify(getAgentMetadata())}`);
 });

@@ -9,6 +9,12 @@ import { AgentConnectionManager } from '../managers/AgentConnectionManager';
 import { AgentMessageHandler } from '../managers/AgentMessageHandler';
 import { Logger } from '../porter.utils';
 
+export interface AgentAPI {
+  post: (message: Message<any>, target?: BrowserLocation) => void;
+  onMessage: (config: MessageConfig) => void;
+  getAgentInfo: () => AgentInfo | null;
+}
+
 export class PorterAgent {
   private static instance: PorterAgent | null = null;
   private readonly connectionManager: AgentConnectionManager;
@@ -64,13 +70,19 @@ export class PorterAgent {
   public post(message: Message<any>, target?: BrowserLocation) {
     const port = this.connectionManager.getPort();
     this.logger.debug('Posting message', { message, target, port });
+
     if (port) {
-      this.messageHandler.post(port, message, target);
+      try {
+        this.messageHandler.post(port, message, target);
+      } catch (error) {
+        this.logger.error('Failed to post message, queueing for retry', {
+          error,
+        });
+        this.connectionManager.queueMessage(message, target);
+      }
     } else {
-      this.logger.error('No port found when posting message', {
-        message,
-        target,
-      });
+      this.logger.debug('No port found, queueing message', { message, target });
+      this.connectionManager.queueMessage(message, target);
     }
   }
 
@@ -89,15 +101,11 @@ export class PorterAgent {
 export function connect(options?: {
   agentContext?: PorterContext;
   namespace?: string;
-}): [
-  (message: Message<any>, target?: BrowserLocation) => void,
-  (config: MessageConfig) => void,
-  () => AgentInfo | null,
-] {
+}): AgentAPI {
   const porterInstance = PorterAgent.getInstance(options);
-  return [
-    porterInstance.post.bind(porterInstance),
-    porterInstance.onMessage.bind(porterInstance),
-    porterInstance.getAgentInfo.bind(porterInstance),
-  ];
+  return {
+    post: porterInstance.post.bind(porterInstance),
+    onMessage: porterInstance.onMessage.bind(porterInstance),
+    getAgentInfo: porterInstance.getAgentInfo.bind(porterInstance),
+  };
 }

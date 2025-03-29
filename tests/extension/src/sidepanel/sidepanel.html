@@ -2,13 +2,70 @@
 <html>
   <head>
     <title>Porter Tests Sidepanel</title>
+    <style>
+      body {
+        padding: 20px;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      .test-section {
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      .status {
+        margin-top: 10px;
+        padding: 10px;
+        background: #f5f5f5;
+        border-radius: 4px;
+      }
+      .log {
+        margin-top: 10px;
+        padding: 10px;
+        background: #f5f5f5;
+        border-radius: 4px;
+        max-height: 200px;
+        overflow-y: auto;
+        font-family: monospace;
+      }
+      button {
+        padding: 8px 16px;
+        margin: 5px;
+        border: none;
+        border-radius: 4px;
+        background: #0066cc;
+        color: white;
+        cursor: pointer;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+    </style>
   </head>
   <body>
-    <h2>Porter Test Suite</h2>
-    <button id="run-tests">Run All Tests</button>
-    <div id="results"></div>
+    <h2>Porter Service Worker Shutdown Test</h2>
 
-    <button id="open-popup">Open Popup</button>
+    <div class="test-section">
+      <h3>Test Instructions</h3>
+      <ol>
+        <li>Click "Start Test" to begin sending messages</li>
+        <li>Messages will be sent every second for 5 seconds</li>
+        <li>Leave the sidepanel open for 5-20 minutes</li>
+        <li>Click "Send Test Message" to trigger reconnection</li>
+      </ol>
+    </div>
+
+    <div class="test-section">
+      <button id="start-test">Start Test</button>
+      <button id="send-message" disabled>Send Test Message</button>
+      <div class="status" id="status">Status: Not started</div>
+      <div class="log" id="log"></div>
+    </div>
+
     <script src="sidepanel.js"></script>
   </body>
 </html>
