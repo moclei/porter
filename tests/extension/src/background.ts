@@ -1,4 +1,10 @@
-import { source, Message, Agent } from 'porter-source';
+import { source, Message, Agent, AgentInfo } from 'porter-source';
+
+// Log service worker startup
+console.log(
+  '[Porter:Test:BG] Service worker started at:',
+  new Date().toISOString()
+);
 
 // Configure side panel to open on action click
 chrome.sidePanel
@@ -6,6 +12,7 @@ chrome.sidePanel
   .catch((error) => console.error(error));
 
 let originalTabId: number | null = null;
+let isShutdown = false;
 
 const { post, onMessage, onConnect, onDisconnect, onMessagesSet } = source();
 
@@ -17,8 +24,8 @@ onMessage({
       );
       return;
     }
-    console.log('[Porter:Test:BG] Echoing message back to:', agent.key);
-    post({ action: 'echo-response', payload: message.payload }, agent);
+    console.log('[Porter:Test:BG] Echoing message back to:', agent.id);
+    post({ action: 'echo-response', payload: message.payload }, agent.id);
   },
   'test-broadcast': (message) => {
     post({ action: 'broadcast-message', payload: message.payload });
@@ -64,8 +71,12 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 
 onConnect((agent) => {
   console.log('[Porter:Test:BG] Agent connected:', agent);
+  isShutdown = false;
 });
 
 onDisconnect((agent) => {
   console.log('[Porter:Test:BG] Agent disconnected:', agent);
+  if (!isShutdown) {
+    console.log('[Porter:Test:BG] Unexpected disconnection detected');
+  }
 });

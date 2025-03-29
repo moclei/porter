@@ -5,6 +5,9 @@ src/
 **/*.test.ts
 **/__tests__/
 
+# Scratch directory for experiments
+scratch/
+
 # Config files
 tsconfig.json
 jest.config.js

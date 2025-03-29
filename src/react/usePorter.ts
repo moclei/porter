@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { AgentInfo, connect, Message, MessageConfig, PorterContext } from '../';
+import {
+  AgentInfo,
+  connect,
+  Message,
+  MessageConfig,
+  PorterContext,
+  AgentAPI,
+} from '../';
 
 interface UsePorterResult {
   post: (message: Message<any>) => void;
@@ -35,17 +42,17 @@ export function usePorter(options?: {
 
     const initializePorter = async () => {
       try {
-        const [post, setMessage, getAgentInfo] = await connect(memoizedOptions);
+        const { post, onMessage, getAgentInfo } = connect(memoizedOptions);
 
         if (isMounted) {
           postRef.current = post;
-          setMessageRef.current = setMessage;
+          setMessageRef.current = onMessage;
           getAgentInfoRef.current = getAgentInfo;
           setIsConnected(true);
           setError(null);
 
           // Set up internal porter-handshake handler
-          setMessage({
+          onMessage({
             'porter-handshake': (message: Message<any>) => {
               console.log('[PORTER] porter-handshake heard: ', message.payload);
               if (isMounted) {

@@ -1,14 +1,20 @@
 import browser, { Runtime } from 'webextension-polyfill';
 import { AgentInfo, PorterError, PorterErrorType } from '../porter.model';
 import { Logger } from '../porter.utils';
+import { MessageQueue } from './MessageQueue';
 
 export class AgentConnectionManager {
   private readonly CONNECTION_TIMEOUT = 5000;
+  private readonly RECONNECT_INTERVAL = 1000; // 1 second
   private connectionTimer: NodeJS.Timeout | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
   private agentInfo: AgentInfo | null = null;
   private port: Runtime.Port | null = null;
   private readonly logger: Logger;
   private readonly connectionId: string;
+  private readonly messageQueue: MessageQueue;
+  private isReconnecting: boolean = false;
+  private reconnectAttemptCount: number = 0;
 
   constructor(
     private readonly namespace: string,
@@ -16,6 +22,7 @@ export class AgentConnectionManager {
   ) {
     this.connectionId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     this.logger = logger;
+    this.messageQueue = new MessageQueue(logger);
   }
 
   public async initializeConnection(): Promise<void> {
@@ -76,12 +83,42 @@ export class AgentConnectionManager {
       });
 
       await handshakePromise;
+
+      // After successful connection, process any queued messages
+      await this.processQueuedMessages();
     } catch (error) {
       this.logger.error('Connection initialization failed:', error);
-      this.port?.disconnect();
-      this.port = null;
-      this.agentInfo = null;
+      this.handleDisconnect(this.port!);
       throw error;
+    }
+  }
+
+  private async processQueuedMessages(): Promise<void> {
+    if (!this.port || this.messageQueue.isEmpty()) {
+      return;
+    }
+
+    const messages = this.messageQueue.dequeue();
+    this.logger.info(
+      `Processing ${messages.length} queued messages after reconnection`
+    );
+
+    for (const { message, target } of messages) {
+      try {
+        this.port.postMessage({
+          action: 'porter-message',
+          payload: { message, target },
+        });
+        this.logger.debug('Successfully resent queued message:', {
+          message,
+          target,
+        });
+      } catch (error) {
+        this.logger.error('Failed to process queued message:', error);
+        // Re-queue the message if it fails
+        this.messageQueue.enqueue(message, target);
+        this.logger.debug('Re-queued failed message for retry');
+      }
     }
   }
 
@@ -93,13 +130,66 @@ export class AgentConnectionManager {
     return this.agentInfo;
   }
 
-  public handleDisconnect(port: Runtime.Port) {
-    this.logger.debug('handleDisconnect');
-    this.port = null;
-    this.agentInfo = null;
-  }
-
   public getNamespace(): string {
     return this.namespace;
+  }
+
+  public handleDisconnect(port: Runtime.Port) {
+    this.logger.info('Port disconnected', {
+      portName: port.name,
+      connectionId: this.connectionId,
+      queuedMessages: this.messageQueue.isEmpty() ? 0 : 'some',
+    });
+    this.port = null;
+    this.agentInfo = null;
+
+    // Start reconnection attempts if not already reconnecting
+    if (!this.isReconnecting) {
+      this.startReconnectionAttempts();
+    }
+  }
+
+  private startReconnectionAttempts(): void {
+    this.isReconnecting = true;
+    this.reconnectAttemptCount = 0;
+
+    if (this.reconnectTimer) {
+      clearInterval(this.reconnectTimer);
+    }
+
+    this.logger.info('Starting reconnection attempts', {
+      interval: this.RECONNECT_INTERVAL,
+      queuedMessages: this.messageQueue.isEmpty() ? 0 : 'some',
+    });
+
+    this.reconnectTimer = setInterval(async () => {
+      this.reconnectAttemptCount++;
+      try {
+        this.logger.debug(`Reconnection attempt ${this.reconnectAttemptCount}`);
+        await this.initializeConnection();
+        this.isReconnecting = false;
+        if (this.reconnectTimer) {
+          clearInterval(this.reconnectTimer);
+        }
+        this.logger.info('Reconnection successful', {
+          attempts: this.reconnectAttemptCount,
+          queuedMessages: this.messageQueue.isEmpty() ? 0 : 'some',
+        });
+      } catch (error) {
+        this.logger.debug(
+          `Reconnection attempt ${this.reconnectAttemptCount} failed:`,
+          error
+        );
+      }
+    }, this.RECONNECT_INTERVAL);
+  }
+
+  public queueMessage(message: any, target?: any): void {
+    this.messageQueue.enqueue(message, target);
+    this.logger.debug('Message queued for retry', {
+      message,
+      target,
+      queueSize: this.messageQueue.isEmpty() ? 0 : 'some',
+    });
   }
 }
