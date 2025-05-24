@@ -10,7 +10,7 @@ import {
 
 interface UsePorterResult {
   post: (message: Message<any>) => void;
-  setMessage: (handlers: MessageConfig) => void;
+  on: (handlers: MessageConfig) => void;
   isConnected: boolean;
   error: Error | null;
   agentInfo: AgentInfo | null;
@@ -24,9 +24,7 @@ export function usePorter(options?: {
   const [error, setError] = useState<Error | null>(null);
   const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
   const postRef = useRef<((message: Message<any>) => void) | null>(null);
-  const setMessageRef = useRef<((handlers: MessageConfig) => void) | null>(
-    null
-  );
+  const onRef = useRef<((handlers: MessageConfig) => void) | null>(null);
   const getAgentInfoRef = useRef<(() => AgentInfo | null) | null>(null);
 
   const memoizedOptions = useMemo(
@@ -42,17 +40,17 @@ export function usePorter(options?: {
 
     const initializePorter = async () => {
       try {
-        const { post, onMessage, getAgentInfo } = connect(memoizedOptions);
+        const { post, on, getAgentInfo } = connect(memoizedOptions);
 
         if (isMounted) {
           postRef.current = post;
-          setMessageRef.current = onMessage;
+          onRef.current = on;
           getAgentInfoRef.current = getAgentInfo;
           setIsConnected(true);
           setError(null);
 
           // Set up internal porter-handshake handler
-          onMessage({
+          on({
             'porter-handshake': (message: Message<any>) => {
               console.log('[PORTER] porter-handshake heard: ', message.payload);
               if (isMounted) {
@@ -97,10 +95,10 @@ export function usePorter(options?: {
     }
   }, []);
 
-  const setMessage = useCallback((handlers: MessageConfig) => {
-    if (setMessageRef.current) {
+  const on = useCallback((handlers: MessageConfig) => {
+    if (onRef.current) {
       try {
-        setMessageRef.current(handlers);
+        onRef.current(handlers);
       } catch (err) {
         setError(
           err instanceof Error
@@ -113,5 +111,5 @@ export function usePorter(options?: {
     }
   }, []);
 
-  return { post, setMessage, isConnected, error, agentInfo };
+  return { post, on, isConnected, error, agentInfo };
 }
