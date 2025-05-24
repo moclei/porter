@@ -212,6 +212,11 @@ export class MessageHandler {
     };
   }
 
+  // Adding new 'on' method that works the same way as onMessage
+  public on(config: MessageConfig) {
+    return this.onMessage(config);
+  }
+
   // Handles messages incomng from ports
   public handleIncomingMessage(message: any, info: AgentInfo) {
     this.logger.debug(`Received message`, {

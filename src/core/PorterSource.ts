@@ -99,6 +99,10 @@ export class PorterSource {
     return this.messageHandler.onMessage(config);
   }
 
+  public on(config: MessageConfig): Unsubscribe {
+    return this.messageHandler.on(config);
+  }
+
   public onConnect(listener: Listener<'onConnect'>): Unsubscribe {
     return this.messageHandler.onConnect(listener);
   }
@@ -133,6 +137,7 @@ export class PorterSource {
 export interface PorterAPI {
   post: (message: Message<any>, target?: MessageTarget) => Promise<void>;
   onMessage: (config: MessageConfig) => Unsubscribe;
+  on: (config: MessageConfig) => Unsubscribe;
   onConnect: (listener: Listener<'onConnect'>) => Unsubscribe;
   onDisconnect: (listener: Listener<'onDisconnect'>) => Unsubscribe;
   onMessagesSet: (listener: Listener<'onMessagesSet'>) => Unsubscribe;
@@ -146,6 +151,7 @@ export function source(namespace: string = 'porter'): PorterAPI {
   return {
     post: instance.post.bind(instance),
     onMessage: instance.onMessage.bind(instance),
+    on: instance.on.bind(instance),
     onConnect: instance.onConnect.bind(instance),
     onDisconnect: instance.onDisconnect.bind(instance),
     onMessagesSet: instance.onMessagesSet.bind(instance),
