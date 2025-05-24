@@ -12,6 +12,7 @@ import { Logger } from '../porter.utils';
 export interface AgentAPI {
   post: (message: Message<any>, target?: BrowserLocation) => void;
   onMessage: (config: MessageConfig) => void;
+  on: (config: MessageConfig) => void;
   getAgentInfo: () => AgentInfo | null;
 }
 
@@ -67,6 +68,12 @@ export class PorterAgent {
     port?.postMessage({ action: 'porter-messages-established' });
   }
 
+  public on(config: MessageConfig) {
+    this.messageHandler.on(config);
+    const port = this.connectionManager.getPort();
+    port?.postMessage({ action: 'porter-messages-established' });
+  }
+
   public post(message: Message<any>, target?: BrowserLocation) {
     const port = this.connectionManager.getPort();
     this.logger.debug('Posting message', { message, target, port });
@@ -106,6 +113,7 @@ export function connect(options?: {
   return {
     post: porterInstance.post.bind(porterInstance),
     onMessage: porterInstance.onMessage.bind(porterInstance),
+    on: porterInstance.on.bind(porterInstance),
     getAgentInfo: porterInstance.getAgentInfo.bind(porterInstance),
   };
 }

@@ -13,19 +13,19 @@ export class AgentMessageHandler {
   private readonly MESSAGE_TIMEOUT = 30000;
   private messageQueue: Array<{ message: Message<any>; timestamp: number }> =
     [];
-  private config: MessageConfig | null = null;
+  private handlers: Map<string, Array<Function>> = new Map();
 
   constructor(private readonly logger: Logger) {}
 
   public handleMessage(port: Runtime.Port, message: any) {
     this.logger.debug('handleMessage, message: ', message);
-    if (!this.config) {
+    if (this.handlers.size === 0) {
       if (this.messageQueue.length >= this.MAX_QUEUE_SIZE) {
         this.logger.warn('Message queue full, dropping message:', message);
         return;
       }
       this.logger.warn(
-        'No message handler configured yet, queueing message: ',
+        'No message handlers configured yet, queueing message: ',
         message
       );
       this.messageQueue.push({ message, timestamp: Date.now() });
@@ -34,10 +34,30 @@ export class AgentMessageHandler {
     this.processMessage(port, message);
   }
 
+  // Legacy method - internally uses the new system
   public onMessage(config: MessageConfig) {
-    this.logger.debug('Setting message handler config: ', config);
-    this.config = config;
+    this.logger.debug('Setting message handlers from config: ', config);
+    // Clear previous handlers to maintain backward compatibility
+    this.handlers.clear();
+    this.on(config);
 
+    this.processQueuedMessages();
+  }
+
+  public on(config: MessageConfig) {
+    this.logger.debug('Adding message handlers from config: ', config);
+
+    Object.entries(config).forEach(([action, handler]) => {
+      if (!this.handlers.has(action)) {
+        this.handlers.set(action, []);
+      }
+      this.handlers.get(action)!.push(handler);
+    });
+
+    this.processQueuedMessages();
+  }
+
+  private processQueuedMessages() {
     while (this.messageQueue.length > 0) {
       const item = this.messageQueue[0];
       if (Date.now() - item.timestamp > this.MESSAGE_TIMEOUT) {
@@ -54,15 +74,15 @@ export class AgentMessageHandler {
 
   private processMessage(port: Runtime.Port, message: any) {
     const action = message.action;
-    const handler = this.config?.[action];
-    if (handler) {
-      this.logger.debug('Found handler, calling with message');
-      handler(message);
-    } else {
+    const actionHandlers = this.handlers.get(action) || [];
+
+    if (actionHandlers.length > 0) {
       this.logger.debug(
-        `No handler for message with action: ${action}, existing handlers are: `,
-        { messageConfig: this.config }
+        `Found ${actionHandlers.length} handlers for action: ${action}`
       );
+      actionHandlers.forEach((handler) => handler(message));
+    } else {
+      this.logger.debug(`No handlers for message with action: ${action}`);
     }
   }
 
