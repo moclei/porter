@@ -10,6 +10,7 @@ import { AgentMessageHandler } from '../managers/AgentMessageHandler';
 import { Logger } from '../porter.utils';
 
 export interface AgentAPI {
+  type: 'agent';
   post: (message: Message<any>, target?: BrowserLocation) => void;
   onMessage: (config: MessageConfig) => void;
   on: (config: MessageConfig) => void;
@@ -111,6 +112,7 @@ export function connect(options?: {
 }): AgentAPI {
   const porterInstance = PorterAgent.getInstance(options);
   return {
+    type: 'agent',
     post: porterInstance.post.bind(porterInstance),
     onMessage: porterInstance.onMessage.bind(porterInstance),
     on: porterInstance.on.bind(porterInstance),
