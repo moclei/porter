@@ -135,6 +135,7 @@ export class PorterSource {
 }
 
 export interface PorterAPI {
+  type: 'source';
   post: (message: Message<any>, target?: MessageTarget) => Promise<void>;
   onMessage: (config: MessageConfig) => Unsubscribe;
   on: (config: MessageConfig) => Unsubscribe;
@@ -149,6 +150,7 @@ export interface PorterAPI {
 export function source(namespace: string = 'porter'): PorterAPI {
   const instance = PorterSource.getInstance(namespace);
   return {
+    type: 'source',
     post: instance.post.bind(instance),
     onMessage: instance.onMessage.bind(instance),
     on: instance.on.bind(instance),
