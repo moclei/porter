@@ -212,6 +212,8 @@ function MyComponent() {
     namespace: 'my-extension',
     // Optionally specify the context if you want to override auto-detection
     agentContext: 'Popup', // or 'ContentScript', 'Sidepanel', etc.
+    // Enable debugging if needed
+    debug: false, // Set to true to enable debugging
   });
 
   // Set up message handlers
@@ -321,6 +323,23 @@ onMessage({
 });
 ```
 
+### Debugging
+
+Porter includes built-in logging that is disabled by default. To enable debug logging:
+
+```typescript
+// In your service worker
+const { post, onMessage } = source('my-extension', { debug: true });
+
+// In your content script or other contexts
+const { post, onMessage } = connect({
+  namespace: 'my-extension',
+  debug: true,
+});
+```
+
+This will output detailed logs about connections, message passing, and internal state to help with debugging.
+
 ## API Reference
 
 ### Source API
@@ -332,7 +351,10 @@ const {
   onConnect,
   onDisconnect,
   queryAgents
-} = source(namespace: string);
+} = source(
+  namespace: string,
+  options?: { debug?: boolean }
+);
 
 // Send messages
 post(message: Message, target?: MessageTarget);
@@ -357,7 +379,11 @@ const {
   post,
   onMessage,
   getAgentInfo
-} = connect(options: ConnectOptions);
+} = connect(options: {
+  namespace?: string;
+  agentContext?: PorterContext;
+  debug?: boolean;
+});
 
 // Send messages
 post(message: Message, target?: MessageTarget);

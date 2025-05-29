@@ -39,7 +39,7 @@ export interface LoggerOptions {
 
 export class Logger {
   private static level: LogLevel = Logger.getLevel();
-  private static enabled: boolean = true;
+  private static enabled: boolean = false;
   private static instances: Map<string, Logger> = new Map();
   private static globalOptions?: LoggerOptions;
 

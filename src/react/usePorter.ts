@@ -19,6 +19,7 @@ interface UsePorterResult {
 export function usePorter(options?: {
   agentContext?: PorterContext;
   namespace?: string;
+  debug?: boolean;
 }): UsePorterResult {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
@@ -31,8 +32,9 @@ export function usePorter(options?: {
     () => ({
       agentContext: options?.agentContext,
       namespace: options?.namespace,
+      debug: options?.debug,
     }),
-    [options?.agentContext, options?.namespace]
+    [options?.agentContext, options?.namespace, options?.debug]
   );
 
   useEffect(() => {

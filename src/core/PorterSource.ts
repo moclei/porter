@@ -18,6 +18,11 @@ import { AgentManager } from '../managers/AgentManager';
 import { ConnectionManager } from '../managers/ConnectionManager';
 import { MessageHandler } from '../managers/MessageHandler';
 
+export interface PorterSourceOptions {
+  namespace?: string;
+  debug?: boolean;
+}
+
 export class PorterSource {
   private static instances: Map<string, PorterSource> = new Map();
   private readonly agentManager: AgentManager;
@@ -27,7 +32,12 @@ export class PorterSource {
   private static staticLogger = Logger.getLogger('SW');
   private namespace: string;
 
-  private constructor(namespace?: string) {
+  private constructor(namespace?: string, options?: PorterSourceOptions) {
+    // Configure logger if debug option is provided
+    if (options?.debug !== undefined) {
+      Logger.configure({ enabled: options.debug });
+    }
+
     this.logger = Logger.getLogger(`SW`);
     this.namespace = namespace || 'porter';
     if (!namespace) {
@@ -73,7 +83,10 @@ export class PorterSource {
     );
   }
 
-  public static getInstance(namespace: string = 'porter'): PorterSource {
+  public static getInstance(
+    namespace: string = 'porter',
+    options?: PorterSourceOptions
+  ): PorterSource {
     PorterSource.staticLogger.debug(
       `Getting instance for namespace: ${namespace}`
     );
@@ -81,11 +94,13 @@ export class PorterSource {
       PorterSource.staticLogger.info(
         `Creating new instance for namespace: ${namespace}`
       );
-      PorterSource.instances.set(namespace, new PorterSource(namespace));
-    } else {
-      PorterSource.staticLogger.debug(
-        `Reusing existing instance for namespace: ${namespace}`
+      PorterSource.instances.set(
+        namespace,
+        new PorterSource(namespace, options)
       );
+    } else if (options?.debug !== undefined) {
+      // If instance exists but debug setting changed, configure logger
+      Logger.configure({ enabled: options.debug });
     }
     return PorterSource.instances.get(namespace)!;
   }
@@ -147,8 +162,11 @@ export interface PorterAPI {
   queryAgents: (location: Partial<BrowserLocation>) => Agent[];
 }
 
-export function source(namespace: string = 'porter'): PorterAPI {
-  const instance = PorterSource.getInstance(namespace);
+export function source(
+  namespace: string = 'porter',
+  options?: PorterSourceOptions
+): PorterAPI {
+  const instance = PorterSource.getInstance(namespace, options);
   return {
     type: 'source',
     post: instance.post.bind(instance),
