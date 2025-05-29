@@ -10,11 +10,16 @@ import { AgentMessageHandler } from '../managers/AgentMessageHandler';
 import { Logger } from '../porter.utils';
 
 export interface AgentAPI {
-  type: 'agent';
   post: (message: Message<any>, target?: BrowserLocation) => void;
   onMessage: (config: MessageConfig) => void;
   on: (config: MessageConfig) => void;
   getAgentInfo: () => AgentInfo | null;
+}
+
+export interface PorterAgentOptions {
+  agentContext?: PorterContext;
+  namespace?: string;
+  debug?: boolean;
 }
 
 export class PorterAgent {
@@ -23,13 +28,16 @@ export class PorterAgent {
   private readonly messageHandler: AgentMessageHandler;
   private readonly logger: Logger;
 
-  private constructor(
-    options: { agentContext?: PorterContext; namespace?: string } = {}
-  ) {
+  private constructor(options: PorterAgentOptions = {}) {
     const namespace = options.namespace ?? 'porter';
     const context = options.agentContext ?? this.determineContext();
 
+    if (options.debug !== undefined) {
+      Logger.configure({ enabled: options.debug });
+    }
+
     this.logger = Logger.getLogger(`Agent`);
+
     this.connectionManager = new AgentConnectionManager(namespace, this.logger);
     this.messageHandler = new AgentMessageHandler(this.logger);
 
@@ -37,15 +45,15 @@ export class PorterAgent {
     this.initializeConnection();
   }
 
-  public static getInstance(
-    options: { agentContext?: PorterContext; namespace?: string } = {}
-  ): PorterAgent {
+  public static getInstance(options: PorterAgentOptions = {}): PorterAgent {
     if (
       !PorterAgent.instance ||
       PorterAgent.instance.connectionManager.getNamespace() !==
         options.namespace
     ) {
       PorterAgent.instance = new PorterAgent(options);
+    } else if (options.debug !== undefined) {
+      Logger.configure({ enabled: options.debug });
     }
     return PorterAgent.instance;
   }
@@ -106,13 +114,9 @@ export class PorterAgent {
   }
 }
 
-export function connect(options?: {
-  agentContext?: PorterContext;
-  namespace?: string;
-}): AgentAPI {
+export function connect(options?: PorterAgentOptions): AgentAPI {
   const porterInstance = PorterAgent.getInstance(options);
   return {
-    type: 'agent',
     post: porterInstance.post.bind(porterInstance),
     onMessage: porterInstance.onMessage.bind(porterInstance),
     on: porterInstance.on.bind(porterInstance),
