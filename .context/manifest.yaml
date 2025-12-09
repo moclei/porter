@@ -1,0 +1,232 @@
+# Porter Project Manifest
+# Machine-readable index for AI assistants and tooling
+
+project:
+  name: porter
+  package_name: porter-source
+  version: "1.1.21"
+  description: TypeScript messaging library for Web Extensions using persistent port connections
+  author:
+    name: Marc O'Cleirigh
+    github: moclei
+    npm: mocleye
+  license: ISC
+  
+urls:
+  repository: https://github.com/moclei/porter
+  npm: https://www.npmjs.com/package/porter-source
+  issues: https://github.com/moclei/porter/issues
+
+tech_stack:
+  language: TypeScript
+  target: ES2021
+  module_formats:
+    - ESM
+    - CJS
+  build_tools:
+    bundler: esbuild
+    typescript: "^5.5.4"
+  testing:
+    framework: jest
+    config: jest.config.js
+  formatting:
+    tool: prettier
+    config: .prettierrc
+
+browser_support:
+  primary: chrome
+  theoretical:
+    - firefox
+    - safari
+    - edge
+  manifest_version: 3
+
+dependencies:
+  runtime:
+    uuid: "^11.1.0"
+  peer:
+    webextension-polyfill: "^0.12.0"
+    react: ">=16.8.0"  # Optional, only for usePorter hook
+  dev:
+    - "@types/chrome"
+    - "@types/react"
+    - "@types/webextension-polyfill"
+    - esbuild
+    - jest
+    - typescript
+
+entry_points:
+  main:
+    source: src/index.ts
+    cjs: dist/cjs/index.js
+    esm: dist/esm/index.js
+    types: dist/types/index.d.ts
+  react:
+    source: src/react/index.ts
+    cjs: dist/cjs/react/index.js
+    esm: dist/esm/react/index.js
+    types: dist/types/react/index.d.ts
+
+exports:
+  - name: source
+    description: Creates Porter instance for service worker
+    file: src/core/PorterSource.ts
+    usage: "const { post, onMessage } = source('namespace')"
+    
+  - name: connect
+    description: Creates Porter agent for content scripts/popups/etc
+    file: src/core/PorterAgent.ts
+    usage: "const { post, onMessage, onDisconnect, onReconnect } = connect({ namespace: 'namespace' })"
+    
+  - name: usePorter
+    description: React hook for Porter integration
+    file: src/react/usePorter.ts
+    usage: "const { post, isConnected, isReconnecting } = usePorter({ namespace: 'namespace' })"
+    
+  - name: DisconnectCallback
+    description: Type for disconnect event callbacks
+    file: src/managers/AgentConnectionManager.ts
+    
+  - name: ReconnectCallback
+    description: Type for reconnect event callbacks
+    file: src/managers/AgentConnectionManager.ts
+
+architecture:
+  pattern: hub-and-spoke
+  hub: service_worker
+  
+  source_components:
+    - name: PorterSource
+      file: src/core/PorterSource.ts
+      role: Main orchestrator for service worker side
+      singleton: true
+      
+    - name: AgentManager
+      file: src/managers/AgentManager.ts
+      role: Tracks connected agents, manages lifecycle events
+      
+    - name: ConnectionManager
+      file: src/managers/ConnectionManager.ts
+      role: Handles port connections and handshake protocol
+      
+    - name: MessageHandler
+      file: src/managers/MessageHandler.ts
+      role: Routes and dispatches messages
+      
+  agent_components:
+    - name: PorterAgent
+      file: src/core/PorterAgent.ts
+      role: Main orchestrator for agent side
+      singleton: true
+      
+    - name: AgentConnectionManager
+      file: src/managers/AgentConnectionManager.ts
+      role: Manages connection to service worker, handles reconnection
+      
+    - name: AgentMessageHandler
+      file: src/managers/AgentMessageHandler.ts
+      role: Routes messages to handlers, queues before handlers set
+      
+    - name: MessageQueue
+      file: src/managers/MessageQueue.ts
+      role: Stores messages during disconnection
+
+types:
+  - name: Message
+    file: src/porter.model.ts
+    description: Standard message format with action, payload, target
+    
+  - name: AgentInfo
+    file: src/porter.model.ts
+    description: Agent metadata (id, location, timestamps)
+    
+  - name: BrowserLocation
+    file: src/porter.model.ts
+    description: Context type, tab ID, frame ID
+    
+  - name: MessageTarget
+    file: src/porter.model.ts
+    description: Union type for message targeting
+    
+  - name: PorterContext
+    file: src/porter.model.ts
+    description: Enum of extension context types
+    
+  - name: PorterError
+    file: src/porter.model.ts
+    description: Custom error class with error types
+
+utilities:
+  - name: Logger
+    file: src/porter.utils.ts
+    description: Configurable logging with levels (ERROR, WARN, INFO, DEBUG, TRACE)
+    
+  - name: isServiceWorker
+    file: src/porter.utils.ts
+    description: Detects service worker environment
+
+scripts:
+  build: "npm run build:ts && npm run build:js"
+  build_ts: "tsc --emitDeclarationOnly --outDir dist"
+  build_js: "node esbuild.config.js"
+  build_watch: "concurrently \"npm run build:ts -- --watch\" \"node esbuild.config.js --watch\""
+  test: "jest --config jest.config.js"
+  test_extension: "web-ext run --source-dir ./tests/extension"
+  dev: "concurrently \"npm run build:watch\" \"npm run test:extension\""
+
+release:
+  workflow: .github/workflows/release.yml
+  trigger:
+    - push to main
+    - manual dispatch with version input
+  steps:
+    - bump version (patch/minor/major)
+    - push with tags
+    - create GitHub release
+    - publish to npm
+
+directories:
+  source: src/
+  output: dist/
+  tests: tests/
+  assets: img/
+  config:
+    - esbuild.config.js
+    - tsconfig.json
+    - tsconfig.build.json
+    - jest.config.js
+    - .prettierrc
+
+assets:
+  logo: img/porter_logo.png
+  icons:
+    - img/icon-16.png
+    - img/icon-48.png
+    - img/icon-128.png
+
+test_extension:
+  path: tests/extension/
+  purpose: Integration testing and usage example
+  files:
+    manifest: tests/extension/manifest.json
+    background: tests/extension/src/background.ts
+    content: tests/extension/src/content.ts
+    sidepanel: tests/extension/src/sidepanel/
+    popup: tests/extension/src/popup/
+
+known_issues:
+  - id: namespace-confusion
+    severity: medium
+    description: Namespace concept is confusing to users, may need simplification
+    status: design_review
+
+related_projects:
+  - name: Crann
+    repository: https://github.com/moclei/crann
+    relationship: Consumer - state synchronization library built on Porter
+    author: moclei
+    
+  - name: Lensor
+    relationship: Indirect consumer via Crann
+    author: moclei
+

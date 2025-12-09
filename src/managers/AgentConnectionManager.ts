@@ -3,6 +3,9 @@ import { AgentInfo, PorterError, PorterErrorType } from '../porter.model';
 import { Logger } from '../porter.utils';
 import { MessageQueue } from './MessageQueue';
 
+export type DisconnectCallback = () => void;
+export type ReconnectCallback = (info: AgentInfo) => void;
+
 export class AgentConnectionManager {
   private readonly CONNECTION_TIMEOUT = 5000;
   private readonly RECONNECT_INTERVAL = 1000; // 1 second
@@ -16,6 +19,10 @@ export class AgentConnectionManager {
   private isReconnecting: boolean = false;
   private reconnectAttemptCount: number = 0;
 
+  // Event callbacks
+  private disconnectCallbacks: Set<DisconnectCallback> = new Set();
+  private reconnectCallbacks: Set<ReconnectCallback> = new Set();
+
   constructor(
     private readonly namespace: string,
     logger: Logger
@@ -23,6 +30,55 @@ export class AgentConnectionManager {
     this.connectionId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     this.logger = logger;
     this.messageQueue = new MessageQueue(logger);
+  }
+
+  /**
+   * Register a callback to be called when the connection is lost
+   * @returns Unsubscribe function
+   */
+  public onDisconnect(callback: DisconnectCallback): () => void {
+    this.disconnectCallbacks.add(callback);
+    return () => {
+      this.disconnectCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Register a callback to be called when reconnection succeeds
+   * @returns Unsubscribe function
+   */
+  public onReconnect(callback: ReconnectCallback): () => void {
+    this.reconnectCallbacks.add(callback);
+    return () => {
+      this.reconnectCallbacks.delete(callback);
+    };
+  }
+
+  private emitDisconnect(): void {
+    this.logger.debug('Emitting disconnect event', {
+      callbackCount: this.disconnectCallbacks.size,
+    });
+    this.disconnectCallbacks.forEach((callback) => {
+      try {
+        callback();
+      } catch (error) {
+        this.logger.error('Error in disconnect callback:', error);
+      }
+    });
+  }
+
+  private emitReconnect(info: AgentInfo): void {
+    this.logger.debug('Emitting reconnect event', {
+      callbackCount: this.reconnectCallbacks.size,
+      info,
+    });
+    this.reconnectCallbacks.forEach((callback) => {
+      try {
+        callback(info);
+      } catch (error) {
+        this.logger.error('Error in reconnect callback:', error);
+      }
+    });
   }
 
   public async initializeConnection(): Promise<void> {
@@ -105,13 +161,14 @@ export class AgentConnectionManager {
 
     for (const { message, target } of messages) {
       try {
-        this.port.postMessage({
-          action: 'porter-message',
-          payload: { message, target },
-        });
+        // Send message in the same format as normal messages
+        const messageToSend = { ...message };
+        if (target) {
+          messageToSend.target = target;
+        }
+        this.port.postMessage(messageToSend);
         this.logger.debug('Successfully resent queued message:', {
-          message,
-          target,
+          message: messageToSend,
         });
       } catch (error) {
         this.logger.error('Failed to process queued message:', error);
@@ -143,6 +200,9 @@ export class AgentConnectionManager {
     this.port = null;
     this.agentInfo = null;
 
+    // Notify listeners of disconnection
+    this.emitDisconnect();
+
     // Start reconnection attempts if not already reconnecting
     if (!this.isReconnecting) {
       this.startReconnectionAttempts();
@@ -170,11 +230,17 @@ export class AgentConnectionManager {
         this.isReconnecting = false;
         if (this.reconnectTimer) {
           clearInterval(this.reconnectTimer);
+          this.reconnectTimer = null;
         }
         this.logger.info('Reconnection successful', {
           attempts: this.reconnectAttemptCount,
           queuedMessages: this.messageQueue.isEmpty() ? 0 : 'some',
         });
+
+        // Notify listeners of successful reconnection
+        if (this.agentInfo) {
+          this.emitReconnect(this.agentInfo);
+        }
       } catch (error) {
         this.logger.debug(
           `Reconnection attempt ${this.reconnectAttemptCount} failed:`,

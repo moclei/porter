@@ -4,8 +4,13 @@ import {
   Message,
   MessageConfig,
   PorterContext,
+  Unsubscribe,
 } from '../porter.model';
-import { AgentConnectionManager } from '../managers/AgentConnectionManager';
+import {
+  AgentConnectionManager,
+  DisconnectCallback,
+  ReconnectCallback,
+} from '../managers/AgentConnectionManager';
 import { AgentMessageHandler } from '../managers/AgentMessageHandler';
 import { Logger } from '../porter.utils';
 
@@ -15,6 +20,8 @@ export interface AgentAPI {
   onMessage: (config: MessageConfig) => void;
   on: (config: MessageConfig) => void;
   getAgentInfo: () => AgentInfo | null;
+  onDisconnect: (callback: DisconnectCallback) => Unsubscribe;
+  onReconnect: (callback: ReconnectCallback) => Unsubscribe;
 }
 
 export interface PorterAgentOptions {
@@ -37,10 +44,16 @@ export class PorterAgent {
       Logger.configure({ enabled: options.debug });
     }
 
-    this.logger = Logger.getLogger(`Agent`);
+    this.logger = Logger.getLogger('Agent');
 
     this.connectionManager = new AgentConnectionManager(namespace, this.logger);
     this.messageHandler = new AgentMessageHandler(this.logger);
+
+    // Listen for reconnection events to re-wire port listeners
+    this.connectionManager.onReconnect((info) => {
+      this.logger.info('Reconnected, re-wiring port listeners', { info });
+      this.setupPortListeners();
+    });
 
     this.logger.info('Initializing with options: ', { options, context });
     this.initializeConnection();
@@ -61,14 +74,25 @@ export class PorterAgent {
 
   private async initializeConnection(): Promise<void> {
     await this.connectionManager.initializeConnection();
+    this.setupPortListeners();
+  }
+
+  /**
+   * Set up message and disconnect listeners on the current port.
+   * Called after initial connection and after each reconnection.
+   */
+  private setupPortListeners(): void {
     const port = this.connectionManager.getPort();
     if (port) {
+      this.logger.debug('Setting up port listeners');
       port.onMessage.addListener((message: any) =>
         this.messageHandler.handleMessage(port, message)
       );
       port.onDisconnect.addListener((p) =>
         this.connectionManager.handleDisconnect(p)
       );
+    } else {
+      this.logger.warn('Cannot setup port listeners: no port available');
     }
   }
 
@@ -113,6 +137,22 @@ export class PorterAgent {
   public getAgentInfo(): AgentInfo | null {
     return this.connectionManager.getAgentInfo() || null;
   }
+
+  /**
+   * Register a callback to be called when the connection to the service worker is lost
+   * @returns Unsubscribe function
+   */
+  public onDisconnect(callback: DisconnectCallback): Unsubscribe {
+    return this.connectionManager.onDisconnect(callback);
+  }
+
+  /**
+   * Register a callback to be called when reconnection to the service worker succeeds
+   * @returns Unsubscribe function
+   */
+  public onReconnect(callback: ReconnectCallback): Unsubscribe {
+    return this.connectionManager.onReconnect(callback);
+  }
 }
 
 export function connect(options?: PorterAgentOptions): AgentAPI {
@@ -123,5 +163,7 @@ export function connect(options?: PorterAgentOptions): AgentAPI {
     onMessage: porterInstance.onMessage.bind(porterInstance),
     on: porterInstance.on.bind(porterInstance),
     getAgentInfo: porterInstance.getAgentInfo.bind(porterInstance),
+    onDisconnect: porterInstance.onDisconnect.bind(porterInstance),
+    onReconnect: porterInstance.onReconnect.bind(porterInstance),
   };
 }

@@ -251,10 +251,25 @@ function MyComponent() {
 The `usePorter` hook provides:
 
 - `post`: Function to send messages
-- `setMessage`: Function to set up message handlers
+- `on`: Function to set up message handlers
 - `isConnected`: Boolean indicating connection status
+- `isReconnecting`: Boolean indicating if currently attempting to reconnect after a disconnection
 - `error`: Any connection or message errors
 - `agentInfo`: Information about the current agent's context
+
+You can also pass optional callbacks:
+
+```typescript
+const { isConnected, isReconnecting } = usePorter({
+  namespace: 'my-extension',
+  onDisconnect: () => {
+    console.log('Lost connection to service worker');
+  },
+  onReconnect: (agentInfo) => {
+    console.log('Reconnected!', agentInfo);
+  },
+});
+```
 
 The hook automatically:
 
@@ -378,7 +393,9 @@ queryAgents(query: Partial<BrowserLocation>): Agent[];
 const {
   post,
   onMessage,
-  getAgentInfo
+  getAgentInfo,
+  onDisconnect,
+  onReconnect
 } = connect(options: {
   namespace?: string;
   agentContext?: PorterContext;
@@ -393,6 +410,12 @@ onMessage(handlers: MessageHandlers);
 
 // Get agent information
 getAgentInfo(): AgentInfo | null;
+
+// Handle disconnection from service worker
+onDisconnect(callback: () => void): () => void;
+
+// Handle reconnection to service worker
+onReconnect(callback: (info: AgentInfo) => void): () => void;
 ```
 
 ## Message Format
